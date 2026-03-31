@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QRadioButton, QButtonGroup, QCompleter, QDialog
 )
 from PyQt6.QtCore import Qt, QSize, QTimer, QRectF
-from PyQt6.QtGui import QFont, QColor, QPalette, QPixmap, QPainter, QBrush
+from PyQt6.QtGui import QFont, QColor, QPalette, QPixmap, QPainter, QBrush, QKeyEvent
 import os
 
 try:
@@ -176,14 +176,23 @@ def show_custom_confirm_dialog(parent, title, text):
     
     dialog = QDialog(parent)
     dialog.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-    
+
+    def key_press(event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Right:
+            dialog.accept()
+        elif event.key() == Qt.Key.Key_Left:
+            dialog.reject()
+        else:
+            QDialog.keyPressEvent(dialog, event)
+    dialog.keyPressEvent = key_press
+
     # Layout erstellen
     layout = QVBoxLayout(dialog)
     # WICHTIG: Dialog passt sich automatisch dem Inhalt an
     layout.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
     layout.setSpacing(20)
     layout.setContentsMargins(30, 30, 30, 40)
-    
+
     # Style setzen
     dialog.setStyleSheet("""
         QDialog {
@@ -192,7 +201,7 @@ def show_custom_confirm_dialog(parent, title, text):
             border-radius: 15px;
         }
     """)
-    
+
     # Text Label
     lbl_text = QLabel(text)
     lbl_text.setStyleSheet("""
@@ -205,14 +214,38 @@ def show_custom_confirm_dialog(parent, title, text):
     lbl_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
     lbl_text.setWordWrap(True)
     layout.addWidget(lbl_text)
-    
+
     # Button Layout
     btn_layout = QHBoxLayout()
     btn_layout.setSpacing(20)
     btn_layout.setContentsMargins(10, 10, 10, 10)
-    
-    # Ja Button (Blau)
+
+    # Nein Button (Rot, links)
+    btn_no = QPushButton("Nein")
+    btn_no.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    btn_no.setCursor(Qt.CursorShape.PointingHandCursor)
+    btn_no.setStyleSheet("""
+        QPushButton {
+            background-color: #16213e;
+            color: white;
+            border: 3px solid #e94560;
+            border-radius: 10px;
+            font-size: 22px;
+            font-weight: bold;
+            min-width: 140px;
+            min-height: 60px;
+            padding: 10px;
+        }
+        QPushButton:hover {
+            background-color: #e94560;
+        }
+    """)
+    btn_no.clicked.connect(dialog.reject)
+    btn_layout.addWidget(btn_no)
+
+    # Ja Button (Blau, rechts)
     btn_yes = QPushButton("Ja")
+    btn_yes.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     btn_yes.setCursor(Qt.CursorShape.PointingHandCursor)
     btn_yes.setStyleSheet("""
         QPushButton {
@@ -233,35 +266,13 @@ def show_custom_confirm_dialog(parent, title, text):
     """)
     btn_yes.clicked.connect(dialog.accept)
     btn_layout.addWidget(btn_yes)
-    
-    # Nein Button (Rot)
-    btn_no = QPushButton("Nein")
-    btn_no.setCursor(Qt.CursorShape.PointingHandCursor)
-    btn_no.setStyleSheet("""
-        QPushButton {
-            background-color: #16213e;
-            color: white;
-            border: 3px solid #e94560;
-            border-radius: 10px;
-            font-size: 22px;
-            font-weight: bold;
-            min-width: 140px;
-            min-height: 60px;
-            padding: 10px;
-        }
-        QPushButton:hover {
-            background-color: #e94560;
-        }
-    """)
-    btn_no.clicked.connect(dialog.reject)
-    btn_layout.addWidget(btn_no)
-    
+
     # Buttons zentriert ins Layout
     wrapper_widget = QWidget()
     wrapper_widget.setLayout(btn_layout)
     wrapper_widget.setStyleSheet("background: transparent; border: none;")
     layout.addWidget(wrapper_widget, 0, Qt.AlignmentFlag.AlignCenter)
-    
+
     return dialog.exec() == QDialog.DialogCode.Accepted
 
 
@@ -274,14 +285,23 @@ def show_custom_info_dialog(parent, title, text, cancel_text=None):
     
     dialog = QDialog(parent)
     dialog.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-    
+
+    def key_press(event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Right:
+            dialog.accept()
+        elif event.key() == Qt.Key.Key_Left:
+            dialog.reject()
+        else:
+            QDialog.keyPressEvent(dialog, event)
+    dialog.keyPressEvent = key_press
+
     # Layout erstellen
     layout = QVBoxLayout(dialog)
     # WICHTIG: Dialog passt sich automatisch dem Inhalt an
     layout.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
     layout.setSpacing(20)
     layout.setContentsMargins(30, 30, 30, 40)
-    
+
     # Style setzen - Identisch zu show_custom_confirm_dialog
     dialog.setStyleSheet("""
         QDialog {
@@ -325,10 +345,34 @@ def show_custom_info_dialog(parent, title, text, cancel_text=None):
     btn_layout.setSpacing(20)
     btn_layout.setContentsMargins(10, 10, 10, 10) # Puffer für Rahmen
     
-    # OK Button
+    # Optionaler Cancel Button (links, rot)
+    if cancel_text:
+        btn_cancel = QPushButton(cancel_text)
+        btn_cancel.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #16213e;
+                color: white;
+                border: 3px solid #e94560;
+                border-radius: 10px;
+                font-size: 22px;
+                font-weight: bold;
+                min-width: 140px;
+                min-height: 60px;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background-color: #e94560;
+            }
+        """)
+        btn_cancel.clicked.connect(dialog.reject)
+        btn_layout.addWidget(btn_cancel)
+
+    # OK Button (rechts, blau)
     btn_ok = QPushButton("OK")
+    btn_ok.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     btn_ok.setCursor(Qt.CursorShape.PointingHandCursor)
-    # OK Button bekommt blauen Rahmen
     btn_ok.setStyleSheet("""
         QPushButton {
             background-color: #16213e;
@@ -348,30 +392,6 @@ def show_custom_info_dialog(parent, title, text, cancel_text=None):
     """)
     btn_ok.clicked.connect(dialog.accept)
     btn_layout.addWidget(btn_ok)
-    
-    # Optionaler Cancel Button
-    if cancel_text:
-        btn_cancel = QPushButton(cancel_text)
-        btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
-        # Cancel Button bekommt roten Rahmen
-        btn_cancel.setStyleSheet("""
-            QPushButton {
-                background-color: #16213e;
-                color: white;
-                border: 3px solid #e94560;
-                border-radius: 10px;
-                font-size: 22px;
-                font-weight: bold;
-                min-width: 140px;
-                min-height: 60px;
-                padding: 10px;
-            }
-            QPushButton:hover {
-                background-color: #e94560;
-            }
-        """)
-        btn_cancel.clicked.connect(dialog.reject)
-        btn_layout.addWidget(btn_cancel)
     
     # Buttons zentriert ins Layout
     wrapper_widget = QWidget()
@@ -2271,40 +2291,78 @@ class ScoreboardPage(QWidget):
         self.player2_id = player2_id
         self.player2_name = player2_name
         self.sets_to_win = sets_to_win
-        
+
         self.score1 = 0
         self.score2 = 0
         self.sets1 = 0
         self.sets2 = 0
         self.history = []
-        
+
+        # Satz-Anzeigen nur bei Mehratz-Modi zeigen
+        show_sets = sets_to_win > 1
+        self.lbl_sets1.setVisible(show_sets)
+        self.lbl_sets2.setVisible(show_sets)
+
         # Aufschlag-Auswahl anzeigen
         self.choose_initial_server()
         self.update_display()
     
     def choose_initial_server(self):
         """Zeigt Dialog zur Auswahl des ersten Aufschlägers."""
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Aufschlag")
-        msg_box.setText("Wer hat Aufschlag?")
-        msg_box.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        msg_box.setStyleSheet("""
-            QMessageBox { background-color: #1a1a2e; border: 3px solid #00d9ff; border-radius: 15px; }
-            QLabel { color: white; font-size: 26px; margin: 20px; font-weight: bold; }
-            QPushButton { background-color: #16213e; color: white; border: 2px solid #0f3460; border-radius: 10px; padding: 15px 30px; font-size: 20px; min-width: 120px; min-height: 50px; }
+        dialog = QDialog(self)
+        dialog.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        dialog.setStyleSheet("""
+            QDialog { background-color: #1a1a2e; border: 3px solid #00d9ff; border-radius: 15px; }
+        """)
+
+        def key_press(event: QKeyEvent):
+            if event.key() == Qt.Key.Key_Right:
+                dialog.accept()
+            elif event.key() == Qt.Key.Key_Left:
+                dialog.reject()
+            else:
+                QDialog.keyPressEvent(dialog, event)
+        dialog.keyPressEvent = key_press
+
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(20)
+        layout.setContentsMargins(30, 30, 30, 40)
+
+        lbl = QLabel("Wer hat Aufschlag?")
+        lbl.setStyleSheet("color: white; font-size: 26px; font-weight: bold; background: transparent; border: none;")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(lbl)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(20)
+
+        btn_p1 = QPushButton(self.player1_name)
+        btn_p1.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn_p1.setMinimumHeight(60)
+        btn_p1.setStyleSheet("""
+            QPushButton { background-color: #16213e; color: white; border: 2px solid #00d9ff; border-radius: 10px; font-size: 20px; min-width: 140px; min-height: 50px; }
             QPushButton:hover { background-color: #00d9ff; color: #1a1a2e; }
         """)
-        
-        btn_player1 = msg_box.addButton(self.player1_name, QMessageBox.ButtonRole.YesRole)
-        btn_player2 = msg_box.addButton(self.player2_name, QMessageBox.ButtonRole.NoRole)
-        
-        msg_box.exec()
-        
-        if msg_box.clickedButton() == btn_player1:
-            self.server = 1
-        else:
-            self.server = 2
-        
+        btn_p1.clicked.connect(dialog.accept)
+        btn_layout.addWidget(btn_p1)
+
+        btn_p2 = QPushButton(self.player2_name)
+        btn_p2.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn_p2.setMinimumHeight(60)
+        btn_p2.setStyleSheet("""
+            QPushButton { background-color: #16213e; color: white; border: 2px solid #00d9ff; border-radius: 10px; font-size: 20px; min-width: 140px; min-height: 50px; }
+            QPushButton:hover { background-color: #00d9ff; color: #1a1a2e; }
+        """)
+        btn_p2.clicked.connect(dialog.reject)
+        btn_layout.addWidget(btn_p2)
+
+        wrapper = QWidget()
+        wrapper.setLayout(btn_layout)
+        wrapper.setStyleSheet("background: transparent; border: none;")
+        layout.addWidget(wrapper, 0, Qt.AlignmentFlag.AlignCenter)
+
+        result = dialog.exec()
+        self.server = 1 if result == QDialog.DialogCode.Accepted else 2
         self.initial_server = self.server
     
     def update_display(self):
