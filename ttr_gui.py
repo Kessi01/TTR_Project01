@@ -1465,6 +1465,43 @@ class DatabaseManager:
             print(f"❌ Fehler Rankliste: {e}")
             return []
 
+    def get_spieler_gesamt_stats(self, turnier_id):
+        """Gesamt-Statistik aller Spieler im Turnier über alle ihre Turniere."""
+        if not MYSQL_AVAILABLE or not self.connection:
+            return []
+        try:
+            cursor = self.connection.cursor()
+            query = """
+                SELECT
+                    CONCAT(s.vorname, ' ', s.nachname) as name,
+                    SUM(CASE
+                        WHEN (m.spieler1_id = s.id AND m.satz_score_s1 > m.satz_score_s2)
+                          OR (m.spieler2_id = s.id AND m.satz_score_s2 > m.satz_score_s1)
+                        THEN 1 ELSE 0 END) as siege_gesamt,
+                    SUM(CASE
+                        WHEN (m.spieler1_id = s.id AND m.satz_score_s1 < m.satz_score_s2)
+                          OR (m.spieler2_id = s.id AND m.satz_score_s2 < m.satz_score_s1)
+                        THEN 1 ELSE 0 END) as niederlagen_gesamt,
+                    COUNT(DISTINCT m.turnier_id) as anzahl_turniere
+                FROM spieler s
+                JOIN matches m ON s.id = m.spieler1_id OR s.id = m.spieler2_id
+                WHERE s.id IN (
+                    SELECT DISTINCT spieler1_id FROM matches WHERE turnier_id = %s
+                    UNION
+                    SELECT DISTINCT spieler2_id FROM matches WHERE turnier_id = %s
+                )
+                AND m.turnier_id IS NOT NULL
+                GROUP BY s.id, s.vorname, s.nachname
+                ORDER BY siege_gesamt DESC
+            """
+            cursor.execute(query, (turnier_id, turnier_id))
+            result = cursor.fetchall()
+            cursor.close()
+            return result
+        except Error as e:
+            print(f"❌ Fehler Gesamt-Stats: {e}")
+            return []
+
 
 # ==================== SEITE 1: STARTMENÜ ====================
 class StartMenuPage(QWidget):
@@ -1918,8 +1955,10 @@ class TurnierListPage(QWidget):
         if self.main_window and self.main_window.db:
             turniere = self.main_window.db.get_turniere()
             for turnier in turniere:
-                turnier_id, name, _ = turnier
-                item = QListWidgetItem(f"{name}")
+                turnier_id, name, erstellt_am, sets_to_win = turnier
+                sets_label = f"Bo{sets_to_win * 2 - 1}"
+                datum_str = str(erstellt_am)[:10] if erstellt_am else ""
+                item = QListWidgetItem(f"{name}  |  {sets_label}  |  {datum_str}")
                 item.setData(Qt.ItemDataRole.UserRole, turnier_id)
                 self.turnier_list.addItem(item)
     
@@ -2007,19 +2046,38 @@ class TurnierDetailPage(QWidget):
         content_layout.addWidget(right_widget)
         
         layout.addLayout(content_layout)
-        
+
+        # Gesamt-Statistik der Spieler
+        stats_title = QLabel("Gesamt-Statistik der Spieler (alle Turniere)")
+        stats_title.setStyleSheet("font-size: 18px; color: #00d9ff; font-weight: bold; margin-top: 10px;")
+        layout.addWidget(stats_title)
+
+        self.stats_table = QTableWidget()
+        self.stats_table.setColumnCount(4)
+        self.stats_table.setHorizontalHeaderLabels(["Spieler", "Siege (Gesamt)", "Niederlagen (Gesamt)", "Turniere"])
+        self.stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.stats_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.stats_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.stats_table.setMaximumHeight(160)
+        self.stats_table.setStyleSheet("""
+            QTableWidget { background-color: #16213e; border: 2px solid #0f3460; border-radius: 10px; font-size: 16px; }
+            QHeaderView::section { background-color: #0f3460; color: #00d9ff; border: none; font-weight: bold; }
+            QTableWidget::item { padding: 8px; color: #ffffff; }
+        """)
+        layout.addWidget(self.stats_table)
+
         btn_layout = QHBoxLayout()
         btn_back = QPushButton("← Zurück")
         btn_back.setMinimumHeight(60)
         btn_back.clicked.connect(self.on_back)
         btn_layout.addWidget(btn_back)
-        
+
         btn_play = QPushButton("Match spielen")
         btn_play.setObjectName("primary")
         btn_play.setMinimumHeight(60)
         btn_play.clicked.connect(self.on_play_match)
         btn_layout.addWidget(btn_play)
-        
+
         layout.addLayout(btn_layout)
         self.setLayout(layout)
     
@@ -2046,6 +2104,15 @@ class TurnierDetailPage(QWidget):
                 self.rank_table.setItem(row, 0, QTableWidgetItem(name))
                 self.rank_table.setItem(row, 1, QTableWidgetItem(str(siege)))
                 self.rank_table.setItem(row, 2, QTableWidgetItem(str(niederlagen)))
+
+            gesamt = self.main_window.db.get_spieler_gesamt_stats(turnier_id)
+            self.stats_table.setRowCount(len(gesamt))
+            for row, eintrag in enumerate(gesamt):
+                name, siege_g, niederlagen_g, anz_turniere = eintrag
+                self.stats_table.setItem(row, 0, QTableWidgetItem(name))
+                self.stats_table.setItem(row, 1, QTableWidgetItem(str(siege_g)))
+                self.stats_table.setItem(row, 2, QTableWidgetItem(str(niederlagen_g)))
+                self.stats_table.setItem(row, 3, QTableWidgetItem(str(anz_turniere)))
     
     def on_back(self):
         if self.main_window:
