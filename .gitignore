@@ -46,3 +46,9 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Alte/temporäre Dateien
+ttr_gui copy.py
+touch_keyboard_temp.py
+TTR_Lokal.session.sql
+*.session.sql
