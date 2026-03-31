@@ -81,6 +81,7 @@ def show_custom_confirm_dialog(
     # No button (red, left)
     btn_no = QPushButton("Nein")
     btn_no.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    btn_no.setAutoDefault(False)
     btn_no.setCursor(Qt.CursorShape.PointingHandCursor)
     btn_no.setStyleSheet("""
         QPushButton {
@@ -104,6 +105,7 @@ def show_custom_confirm_dialog(
     # Yes button (blue, right)
     btn_yes = QPushButton("Ja")
     btn_yes.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    btn_yes.setAutoDefault(False)
     btn_yes.setCursor(Qt.CursorShape.PointingHandCursor)
     btn_yes.setStyleSheet("""
         QPushButton {
@@ -222,6 +224,7 @@ def show_custom_info_dialog(
     if cancel_text:
         btn_cancel = QPushButton(cancel_text)
         btn_cancel.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn_cancel.setAutoDefault(False)
         btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_cancel.setStyleSheet("""
             QPushButton {
@@ -245,6 +248,7 @@ def show_custom_info_dialog(
     # OK button (blue, right)
     btn_ok = QPushButton("OK")
     btn_ok.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    btn_ok.setAutoDefault(False)
     btn_ok.setCursor(Qt.CursorShape.PointingHandCursor)
     btn_ok.setStyleSheet("""
         QPushButton {

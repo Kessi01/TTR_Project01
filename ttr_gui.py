@@ -14,7 +14,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QStackedWidget, QLineEdit, QFrame, QMessageBox,
+    QPushButton, QLabel, QStackedWidget, QLineEdit, QFrame,
     QSizePolicy, QSpacerItem, QListWidget, QListWidgetItem, QTableWidget,
     QTableWidgetItem, QHeaderView, QInputDialog, QAbstractItemView,
     QComboBox, QRadioButton, QButtonGroup, QCompleter, QDialog
@@ -223,6 +223,7 @@ def show_custom_confirm_dialog(parent, title, text):
     # Nein Button (Rot, links)
     btn_no = QPushButton("Nein")
     btn_no.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    btn_no.setAutoDefault(False)
     btn_no.setCursor(Qt.CursorShape.PointingHandCursor)
     btn_no.setStyleSheet("""
         QPushButton {
@@ -246,6 +247,7 @@ def show_custom_confirm_dialog(parent, title, text):
     # Ja Button (Blau, rechts)
     btn_yes = QPushButton("Ja")
     btn_yes.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    btn_yes.setAutoDefault(False)
     btn_yes.setCursor(Qt.CursorShape.PointingHandCursor)
     btn_yes.setStyleSheet("""
         QPushButton {
@@ -349,6 +351,7 @@ def show_custom_info_dialog(parent, title, text, cancel_text=None):
     if cancel_text:
         btn_cancel = QPushButton(cancel_text)
         btn_cancel.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn_cancel.setAutoDefault(False)
         btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_cancel.setStyleSheet("""
             QPushButton {
@@ -372,6 +375,7 @@ def show_custom_info_dialog(parent, title, text, cancel_text=None):
     # OK Button (rechts, blau)
     btn_ok = QPushButton("OK")
     btn_ok.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    btn_ok.setAutoDefault(False)
     btn_ok.setCursor(Qt.CursorShape.PointingHandCursor)
     btn_ok.setStyleSheet("""
         QPushButton {
@@ -1837,18 +1841,18 @@ class MatchSetupPage(QWidget):
             player2_name = self.input_player2.text().strip()
             
             if not player1_name or not player2_name:
-                QMessageBox.warning(self, "Fehler", "Bitte gib beide Spielernamen ein!")
+                show_custom_info_dialog(self, "Fehler", "Bitte gib beide Spielernamen ein!")
                 return
             
             if player1_name.lower() == player2_name.lower():
-                QMessageBox.warning(self, "Fehler", "Die Spielernamen müssen unterschiedlich sein!")
+                show_custom_info_dialog(self, "Fehler", "Die Spielernamen müssen unterschiedlich sein!")
                 return
         
         turnier_id = None
         turnier_name = None
         if mode_index == 4: # Turnier
             if self.combo_turnier.count() == 0:
-                QMessageBox.warning(self, "Fehler", "Bitte wähle ein Turnier aus!")
+                show_custom_info_dialog(self, "Fehler", "Bitte wähle ein Turnier aus!")
                 return
             
             # Data ist jetzt (turnier_id, sets_to_win)
