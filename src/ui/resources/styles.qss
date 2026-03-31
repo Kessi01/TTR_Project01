@@ -1,0 +1,281 @@
+/* ==================== TTR - DARK THEME STYLESHEET ==================== */
+/* Global Dark Theme for Table Tennis Referee Application               */
+/* ===================================================================== */
+
+/* Main Window & Base Widgets */
+QMainWindow, QWidget {
+    background-color: #1a1a2e;
+    color: #ffffff;
+}
+
+QLabel {
+    color: #ffffff;
+    font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+/* ==================== BUTTONS ==================== */
+
+QPushButton {
+    background-color: #16213e;
+    color: #ffffff;
+    border: 2px solid #0f3460;
+    border-radius: 15px;
+    padding: 20px;
+    font-size: 22px;
+    font-weight: bold;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    min-height: 60px;
+}
+
+QPushButton:hover {
+    background-color: #0f3460;
+    border-color: #00d9ff;
+}
+
+QPushButton:pressed {
+    background-color: #00d9ff;
+    color: #1a1a2e;
+}
+
+/* Primary Button (Call-to-Action) */
+QPushButton#primary {
+    background-color: #00d9ff;
+    color: #1a1a2e;
+    border: none;
+}
+
+QPushButton#primary:hover {
+    background-color: #00b8d4;
+}
+
+/* Danger Button (Delete, Cancel, etc.) */
+QPushButton#danger {
+    background-color: #e94560;
+    border-color: #e94560;
+}
+
+QPushButton#danger:hover {
+    background-color: #c73e54;
+}
+
+/* Score Buttons (Large, Clickable Scores) */
+QPushButton#score {
+    background-color: #0f3460;
+    border: 3px solid #00d9ff;
+    border-radius: 20px;
+    font-size: 48px;
+    min-width: 120px;
+    min-height: 120px;
+}
+
+QPushButton#score:pressed {
+    background-color: #00d9ff;
+    color: #1a1a2e;
+}
+
+/* ==================== INPUT FIELDS ==================== */
+
+QLineEdit {
+    background-color: #16213e;
+    color: #ffffff;
+    border: 2px solid #0f3460;
+    border-radius: 10px;
+    padding: 15px;
+    font-size: 22px;
+    min-height: 50px;
+}
+
+QLineEdit:focus {
+    border-color: #00d9ff;
+}
+
+QLineEdit::placeholder {
+    color: #666666;
+}
+
+/* ==================== FRAMES & SEPARATORS ==================== */
+
+QFrame#separator {
+    background-color: #0f3460;
+    max-height: 2px;
+}
+
+/* ==================== LABELS ==================== */
+
+/* Title Labels */
+QLabel#title {
+    color: #00d9ff;
+    font-size: 48px;
+    font-weight: bold;
+}
+
+/* Subtitle Labels */
+QLabel#subtitle {
+    color: #888888;
+    font-size: 18px;
+}
+
+/* Large Score Display */
+QLabel#scoreBig {
+    color: #ffffff;
+    font-size: 540px;
+    font-weight: bold;
+}
+
+/* Player Name Labels */
+QLabel#playerName {
+    color: #00d9ff;
+    font-size: 48px;
+    font-weight: bold;
+}
+
+/* Set Score Display */
+QLabel#setScore {
+    color: #ffffff;
+    font-size: 108px;
+    font-weight: bold;
+}
+
+/* Set Label (e.g., "Sätze") */
+QLabel#setLabel {
+    color: #888888;
+    font-size: 24px;
+}
+
+/* ==================== LISTS & TABLES ==================== */
+
+QListWidget {
+    background-color: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 20px;
+}
+
+QListWidget::item {
+    padding: 15px;
+    border-bottom: 1px solid #0f3460;
+    color: #ffffff;
+}
+
+QListWidget::item:selected {
+    background-color: #00d9ff;
+    color: #1a1a2e;
+}
+
+QTableWidget {
+    background-color: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 10px;
+    font-size: 16px;
+}
+
+QHeaderView::section {
+    background-color: #0f3460;
+    color: #00d9ff;
+    border: none;
+    font-weight: bold;
+    padding: 8px;
+}
+
+QTableWidget::item {
+    padding: 8px;
+    color: #ffffff;
+}
+
+/* ==================== COMBO BOX (DROPDOWN) ==================== */
+
+QComboBox {
+    background-color: #16213e;
+    color: #ffffff;
+    border: 2px solid #0f3460;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 18px;
+}
+
+QComboBox:hover {
+    border-color: #00d9ff;
+}
+
+QComboBox::drop-down {
+    border: none;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #16213e;
+    color: #ffffff;
+    selection-background-color: #00d9ff;
+    selection-color: #1a1a2e;
+    border: 2px solid #0f3460;
+}
+
+/* ==================== RADIO BUTTONS ==================== */
+
+QRadioButton {
+    font-size: 20px;
+    color: #ffffff;
+    spacing: 8px;
+    padding: 10px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+}
+
+QRadioButton:hover {
+    background-color: #1a1a2e;
+    border: 1px solid #0f3460;
+}
+
+QRadioButton::indicator {
+    width: 24px;
+    height: 24px;
+}
+
+QRadioButton::indicator:checked {
+    background-color: #00d9ff;
+    border: 2px solid #00d9ff;
+    border-radius: 12px;
+}
+
+QRadioButton::indicator:unchecked {
+    background-color: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 12px;
+}
+
+/* ==================== DIALOGS ==================== */
+
+QDialog {
+    background-color: #1a1a2e;
+    border: 3px solid #00d9ff;
+    border-radius: 15px;
+}
+
+QMessageBox {
+    background-color: #1a1a2e;
+    border: 3px solid #00d9ff;
+    border-radius: 15px;
+}
+
+QMessageBox QLabel {
+    color: white;
+    font-size: 26px;
+    margin: 20px;
+    font-weight: bold;
+}
+
+QMessageBox QPushButton {
+    background-color: #16213e;
+    color: white;
+    border: 2px solid #0f3460;
+    border-radius: 10px;
+    padding: 15px 30px;
+    font-size: 20px;
+    min-width: 120px;
+    min-height: 50px;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #00d9ff;
+    color: #1a1a2e;
+}

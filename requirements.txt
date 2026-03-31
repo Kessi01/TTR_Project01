@@ -1,0 +1,16 @@
+# TTR - Table Tennis Referee
+# Python Package Requirements
+
+# GUI Framework
+PyQt6>=6.4.0
+
+# Database
+mysql-connector-python>=8.0.0
+
+# Configuration Management
+python-dotenv>=1.0.0
+
+# Development Tools (optional)
+# pytest>=7.0.0
+# mypy>=1.0.0
+# black>=23.0.0
