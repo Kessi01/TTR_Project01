@@ -49,27 +49,39 @@ class PlayerRepository(Protocol):
 
 class MatchRepository(Protocol):
     """Interface for match data access."""
-    
+
     def save(
         self,
         player1_id: int,
         player2_id: int,
         sets_player1: int,
         sets_player2: int,
-        tournament_id: Optional[int] = None
-    ) -> bool:
-        """Save a completed match.
-        
+        tournament_id: Optional[int] = None,
+        set_scores: Optional[List[Tuple[int, int]]] = None,
+    ) -> Optional[int]:
+        """Save a completed match including optional per-set scores.
+
+        Args:
+            set_scores: List of (points_p1, points_p2) per set in order.
+
         Returns:
-            True if successful
+            match_id if successful, None on error
         """
         ...
-    
+
     def get_by_tournament(self, tournament_id: int) -> List[Tuple]:
         """Get all matches for a tournament.
-        
+
         Returns:
             List of (match_id, player1_name, player2_name, score1, score2, date)
+        """
+        ...
+
+    def get_set_scores(self, match_id: int) -> List[Tuple[int, int, int]]:
+        """Get per-set scores for a match.
+
+        Returns:
+            List of (set_nummer, punkte_s1, punkte_s2)
         """
         ...
 
@@ -157,23 +169,24 @@ class MySQLPlayerRepository:
 
 class MySQLMatchRepository:
     """MySQL implementation of MatchRepository."""
-    
+
     def __init__(self, db: DatabaseConnection) -> None:
         self.db = db
-    
+
     def save(
         self,
         player1_id: int,
         player2_id: int,
         sets_player1: int,
         sets_player2: int,
-        tournament_id: Optional[int] = None
-    ) -> bool:
-        """Save match to database."""
+        tournament_id: Optional[int] = None,
+        set_scores: Optional[List[Tuple[int, int]]] = None,
+    ) -> Optional[int]:
+        """Save match and optional per-set scores. Returns match_id or None."""
         try:
             cursor = self.db.get_cursor()
             query = """
-                INSERT INTO matches 
+                INSERT INTO matches
                 (spieler1_id, spieler2_id, satz_score_s1, satz_score_s2, turnier_id)
                 VALUES (%s, %s, %s, %s, %s)
             """
@@ -182,16 +195,34 @@ class MySQLMatchRepository:
                 (player1_id, player2_id, sets_player1, sets_player2, tournament_id)
             )
             self.db.commit()
+            match_id = cursor.lastrowid
             cursor.close()
-            
+
+            if set_scores and match_id:
+                self._save_set_scores(match_id, set_scores)
+
             print(f"✅ Match saved: {sets_player1}-{sets_player2}")
-            return True
-            
+            return match_id
+
         except Error as e:
             print(f"❌ Error saving match: {e}")
             self.db.rollback()
-            return False
-    
+            return None
+
+    def _save_set_scores(self, match_id: int, set_scores: List[Tuple[int, int]]) -> None:
+        """Insert per-set scores into match_sets."""
+        try:
+            cursor = self.db.get_cursor()
+            for i, (p1, p2) in enumerate(set_scores, start=1):
+                cursor.execute(
+                    "INSERT INTO match_sets (match_id, set_nummer, punkte_s1, punkte_s2) VALUES (%s, %s, %s, %s)",
+                    (match_id, i, p1, p2)
+                )
+            self.db.commit()
+            cursor.close()
+        except Error as e:
+            print(f"❌ Error saving set scores: {e}")
+
     def get_by_tournament(self, tournament_id: int) -> List[Tuple]:
         """Get all matches for a tournament."""
         try:
@@ -211,9 +242,24 @@ class MySQLMatchRepository:
             result = cursor.fetchall()
             cursor.close()
             return result
-            
+
         except Error as e:
             print(f"❌ Error loading matches: {e}")
+            return []
+
+    def get_set_scores(self, match_id: int) -> List[Tuple[int, int, int]]:
+        """Get per-set scores for a match."""
+        try:
+            cursor = self.db.get_cursor()
+            cursor.execute(
+                "SELECT set_nummer, punkte_s1, punkte_s2 FROM match_sets WHERE match_id = %s ORDER BY set_nummer",
+                (match_id,)
+            )
+            result = cursor.fetchall()
+            cursor.close()
+            return result
+        except Error as e:
+            print(f"❌ Error loading set scores: {e}")
             return []
 
 
@@ -259,12 +305,18 @@ class MySQLTournamentRepository:
             self.db.rollback()
             return None
     
-    def get_rankings(self, tournament_id: int) -> List[Tuple[str, int, int]]:
-        """Get player rankings for a tournament."""
+    def get_rankings(self, tournament_id: int) -> List[Tuple]:
+        """Get player rankings for a tournament.
+
+        Returns:
+            List of (name, wins, losses, sets_won, sets_lost, set_diff)
+        """
         try:
             cursor = self.db.get_cursor()
             query = """
-                SELECT name, wins, losses FROM (
+                SELECT name, wins, losses, sets_won, sets_lost,
+                       (sets_won - sets_lost) as set_diff
+                FROM (
                     SELECT
                         CONCAT(s.vorname, ' ', s.nachname) as name,
                         SUM(CASE
@@ -274,19 +326,23 @@ class MySQLTournamentRepository:
                         SUM(CASE
                             WHEN (m.spieler1_id = s.id AND m.satz_score_s1 < m.satz_score_s2)
                               OR (m.spieler2_id = s.id AND m.satz_score_s2 < m.satz_score_s1)
-                            THEN 1 ELSE 0 END) as losses
+                            THEN 1 ELSE 0 END) as losses,
+                        SUM(CASE WHEN m.spieler1_id = s.id THEN m.satz_score_s1
+                                 ELSE m.satz_score_s2 END) as sets_won,
+                        SUM(CASE WHEN m.spieler1_id = s.id THEN m.satz_score_s2
+                                 ELSE m.satz_score_s1 END) as sets_lost
                     FROM spieler s
                     JOIN matches m ON s.id = m.spieler1_id OR s.id = m.spieler2_id
                     WHERE m.turnier_id = %s
                     GROUP BY s.id, s.vorname, s.nachname
                 ) as stats
-                ORDER BY wins DESC, losses ASC
+                ORDER BY wins DESC, set_diff DESC
             """
             cursor.execute(query, (tournament_id,))
             result = cursor.fetchall()
             cursor.close()
             return result
-            
+
         except Error as e:
             print(f"❌ Error loading rankings: {e}")
             return []
@@ -332,33 +388,37 @@ class DummyPlayerRepository:
 
 class DummyMatchRepository:
     """Fake match repository for offline mode."""
-    
+
     def __init__(self) -> None:
         self._matches: List[Tuple] = []
-    
+        self._set_scores: dict = {}
+
     def save(
         self,
         player1_id: int,
         player2_id: int,
         sets_player1: int,
         sets_player2: int,
-        tournament_id: Optional[int] = None
-    ) -> bool:
-        print(f"💾 Dummy: Saved match {sets_player1}-{sets_player2}")
+        tournament_id: Optional[int] = None,
+        set_scores: Optional[List[Tuple[int, int]]] = None,
+    ) -> Optional[int]:
+        match_id = len(self._matches) + 1
+        print(f"💾 Dummy: Saved match {sets_player1}-{sets_player2} (ID: {match_id})")
         self._matches.append((
-            len(self._matches) + 1,
-            player1_id,
-            player2_id,
-            sets_player1,
-            sets_player2,
-            tournament_id,
-            datetime.now()
+            match_id, player1_id, player2_id,
+            sets_player1, sets_player2, tournament_id, datetime.now()
         ))
-        return True
-    
+        if set_scores:
+            self._set_scores[match_id] = set_scores
+        return match_id
+
     def get_by_tournament(self, tournament_id: int) -> List[Tuple]:
         print(f"💾 Dummy: Loading matches for tournament {tournament_id}")
         return []
+
+    def get_set_scores(self, match_id: int) -> List[Tuple[int, int, int]]:
+        scores = self._set_scores.get(match_id, [])
+        return [(i + 1, p1, p2) for i, (p1, p2) in enumerate(scores)]
 
 
 class DummyTournamentRepository:
@@ -380,11 +440,11 @@ class DummyTournamentRepository:
         print(f"💾 Dummy: Created tournament {name}")
         return new_id
     
-    def get_rankings(self, tournament_id: int) -> List[Tuple[str, int, int]]:
+    def get_rankings(self, tournament_id: int) -> List[Tuple]:
         print(f"💾 Dummy: Loading rankings for tournament {tournament_id}")
         return [
-            ("Max Mustermann", 5, 2),
-            ("Anna Schmidt", 4, 3),
+            ("Max Mustermann", 5, 2, 12, 7, 5),
+            ("Anna Schmidt", 4, 3, 10, 9, 1),
         ]
 
 

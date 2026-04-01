@@ -131,24 +131,37 @@ class DatabaseConnection:
     
     def _ensure_schema(self) -> None:
         """Ensure database schema is up to date.
-        
+
         Checks for required columns and adds them if missing.
         """
         try:
             cursor = self.get_cursor()
-            
+
             # Check if 'sets_to_win' column exists in 'turniere' table
             cursor.execute("SHOW COLUMNS FROM turniere LIKE 'sets_to_win'")
             result = cursor.fetchone()
-            
+
             if not result:
                 print("⚠️ Column 'sets_to_win' missing in 'turniere'. Adding...")
                 cursor.execute("ALTER TABLE turniere ADD COLUMN sets_to_win INT DEFAULT 3")
                 self.commit()
                 print("✅ Database schema updated")
-            
+
+            # Create match_sets table for per-set score tracking
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS match_sets (
+                    id INT PRIMARY KEY AUTO_INCREMENT,
+                    match_id INT NOT NULL,
+                    set_nummer INT NOT NULL,
+                    punkte_s1 INT NOT NULL,
+                    punkte_s2 INT NOT NULL,
+                    FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
+                )
+            """)
+            self.commit()
+
             cursor.close()
-            
+
         except Error as e:
             print(f"⚠️ Schema check failed (non-critical): {e}")
     

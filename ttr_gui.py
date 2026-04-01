@@ -1296,6 +1296,18 @@ class DatabaseManager:
                 cursor.execute("ALTER TABLE turniere ADD COLUMN sets_to_win INT DEFAULT 3")
                 self.connection.commit()
                 print("✅ Schema aktualisiert.")
+            # Tabelle match_sets erstellen falls nicht vorhanden
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS match_sets (
+                    id INT PRIMARY KEY AUTO_INCREMENT,
+                    match_id INT NOT NULL,
+                    set_nummer INT NOT NULL,
+                    punkte_s1 INT NOT NULL,
+                    punkte_s2 INT NOT NULL,
+                    FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
+                )
+            """)
+            self.connection.commit()
             cursor.close()
         except Error as e:
             print(f"❌ Fehler bei Schema-Prüfung: {e}")
@@ -1319,11 +1331,11 @@ class DatabaseManager:
         return spieler_liste
     
     def save_match(self, spieler1_id, spieler2_id, satz_score_s1, satz_score_s2, turnier_id=None):
-        """Speichert ein Match-Ergebnis in der Datenbank."""
+        """Speichert ein Match-Ergebnis in der Datenbank. Gibt match_id zurück oder None bei Fehler."""
         if not MYSQL_AVAILABLE or not self.connection:
             print(f"💾 Match gespeichert (Dummy): {spieler1_id} vs {spieler2_id}")
-            return True
-        
+            return None
+
         try:
             cursor = self.connection.cursor()
             query = """
@@ -1332,12 +1344,35 @@ class DatabaseManager:
             """
             cursor.execute(query, (spieler1_id, spieler2_id, satz_score_s1, satz_score_s2, turnier_id))
             self.connection.commit()
+            match_id = cursor.lastrowid
             cursor.close()
-            print(f"✅ Match gespeichert.")
-            return True
+            print(f"✅ Match gespeichert (ID: {match_id}).")
+            return match_id
         except Error as e:
             print(f"❌ Fehler beim Speichern des Matches: {e}")
-            return False
+            return None
+
+    def save_match_sets(self, match_id, set_scores):
+        """Speichert die Einzel-Satz-Ergebnisse eines Matches.
+
+        Args:
+            match_id: ID des Matches
+            set_scores: Liste von (punkte_s1, punkte_s2) Tupeln, in Satz-Reihenfolge
+        """
+        if not MYSQL_AVAILABLE or not self.connection or not match_id or not set_scores:
+            return
+        try:
+            cursor = self.connection.cursor()
+            for i, (p1, p2) in enumerate(set_scores, start=1):
+                cursor.execute(
+                    "INSERT INTO match_sets (match_id, set_nummer, punkte_s1, punkte_s2) VALUES (%s, %s, %s, %s)",
+                    (match_id, i, p1, p2)
+                )
+            self.connection.commit()
+            cursor.close()
+            print(f"✅ {len(set_scores)} Sätze gespeichert.")
+        except Error as e:
+            print(f"❌ Fehler beim Speichern der Sätze: {e}")
     
     def get_or_create_spieler(self, name):
         """Sucht Spieler oder erstellt neu."""
@@ -1372,14 +1407,17 @@ class DatabaseManager:
             print(f"❌ Fehler bei Spieler-Verarbeitung: {e}")
             return None
     
-    def save_match_with_names(self, spieler1_name, spieler2_name, satz_score_s1, satz_score_s2, turnier_id=None):
+    def save_match_with_names(self, spieler1_name, spieler2_name, satz_score_s1, satz_score_s2, turnier_id=None, set_scores=None):
         spieler1_id = self.get_or_create_spieler(spieler1_name)
         spieler2_id = self.get_or_create_spieler(spieler2_name)
-        
+
         if spieler1_id is None or spieler2_id is None:
             return False
-        
-        return self.save_match(spieler1_id, spieler2_id, satz_score_s1, satz_score_s2, turnier_id)
+
+        match_id = self.save_match(spieler1_id, spieler2_id, satz_score_s1, satz_score_s2, turnier_id)
+        if match_id and set_scores:
+            self.save_match_sets(match_id, set_scores)
+        return match_id is not None
     
     # ==================== TURNIER-METHODEN ====================
     def get_turniere(self):
@@ -1434,28 +1472,35 @@ class DatabaseManager:
             return []
     
     def get_rangliste(self, turnier_id):
+        """Rangliste mit Siegen, Niederlagen, Sätzen und Satzdifferenz."""
         if not MYSQL_AVAILABLE or not self.connection:
             return []
         try:
             cursor = self.connection.cursor()
             query = """
-                SELECT name, siege, niederlagen FROM (
-                    SELECT 
+                SELECT name, siege, niederlagen, saetze_gewonnen, saetze_verloren,
+                       (saetze_gewonnen - saetze_verloren) as satzdiff
+                FROM (
+                    SELECT
                         CONCAT(s.vorname, ' ', s.nachname) as name,
-                        SUM(CASE 
-                            WHEN (m.spieler1_id = s.id AND m.satz_score_s1 > m.satz_score_s2) 
-                              OR (m.spieler2_id = s.id AND m.satz_score_s2 > m.satz_score_s1) 
+                        SUM(CASE
+                            WHEN (m.spieler1_id = s.id AND m.satz_score_s1 > m.satz_score_s2)
+                              OR (m.spieler2_id = s.id AND m.satz_score_s2 > m.satz_score_s1)
                             THEN 1 ELSE 0 END) as siege,
-                        SUM(CASE 
-                            WHEN (m.spieler1_id = s.id AND m.satz_score_s1 < m.satz_score_s2) 
-                              OR (m.spieler2_id = s.id AND m.satz_score_s2 < m.satz_score_s1) 
-                            THEN 1 ELSE 0 END) as niederlagen
+                        SUM(CASE
+                            WHEN (m.spieler1_id = s.id AND m.satz_score_s1 < m.satz_score_s2)
+                              OR (m.spieler2_id = s.id AND m.satz_score_s2 < m.satz_score_s1)
+                            THEN 1 ELSE 0 END) as niederlagen,
+                        SUM(CASE WHEN m.spieler1_id = s.id THEN m.satz_score_s1
+                                 ELSE m.satz_score_s2 END) as saetze_gewonnen,
+                        SUM(CASE WHEN m.spieler1_id = s.id THEN m.satz_score_s2
+                                 ELSE m.satz_score_s1 END) as saetze_verloren
                     FROM spieler s
                     JOIN matches m ON s.id = m.spieler1_id OR s.id = m.spieler2_id
                     WHERE m.turnier_id = %s
                     GROUP BY s.id, s.vorname, s.nachname
                 ) as stats
-                ORDER BY siege DESC, niederlagen ASC
+                ORDER BY siege DESC, satzdiff DESC
             """
             cursor.execute(query, (turnier_id,))
             rangliste = cursor.fetchall()
@@ -1463,6 +1508,27 @@ class DatabaseManager:
             return rangliste
         except Error as e:
             print(f"❌ Fehler Rankliste: {e}")
+            return []
+
+    def get_match_sets(self, match_id):
+        """Lädt die Einzel-Satz-Ergebnisse eines Matches.
+
+        Returns:
+            Liste von (set_nummer, punkte_s1, punkte_s2)
+        """
+        if not MYSQL_AVAILABLE or not self.connection:
+            return []
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT set_nummer, punkte_s1, punkte_s2 FROM match_sets WHERE match_id = %s ORDER BY set_nummer",
+                (match_id,)
+            )
+            result = cursor.fetchall()
+            cursor.close()
+            return result
+        except Error as e:
+            print(f"❌ Fehler beim Laden der Sätze: {e}")
             return []
 
     def get_spieler_gesamt_stats(self, turnier_id):
@@ -2004,10 +2070,10 @@ class TurnierDetailPage(QWidget):
         # Matches Tabelle
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
-        left_title = QLabel("Match-Historie")
+        left_title = QLabel("Match-Historie  (Doppelklick = Satz-Detail)")
         left_title.setStyleSheet("font-size: 20px; color: #00d9ff; font-weight: bold;")
         left_layout.addWidget(left_title)
-        
+
         self.match_table = QTableWidget()
         self.match_table.setColumnCount(4)
         self.match_table.setHorizontalHeaderLabels(["Spieler 1", "Spieler 2", "Ergebnis", "Datum"])
@@ -2015,31 +2081,35 @@ class TurnierDetailPage(QWidget):
         self.match_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.match_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.match_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.match_table.setCursor(Qt.CursorShape.PointingHandCursor)
         self.match_table.setStyleSheet("""
             QTableWidget { background-color: #16213e; border: 2px solid #0f3460; border-radius: 10px; font-size: 16px; }
             QHeaderView::section { background-color: #0f3460; color: #00d9ff; border: none; font-weight: bold; }
             QTableWidget::item { padding: 8px; color: #ffffff; }
+            QTableWidget::item:selected { background-color: #0f3460; color: #00d9ff; }
         """)
+        self.match_table.cellDoubleClicked.connect(self.on_match_double_clicked)
         left_layout.addWidget(self.match_table)
         content_layout.addWidget(left_widget)
-        
+
         # Rangliste
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_title = QLabel("Rangliste")
         right_title.setStyleSheet("font-size: 20px; color: #00d9ff; font-weight: bold;")
         right_layout.addWidget(right_title)
-        
+
         self.rank_table = QTableWidget()
-        self.rank_table.setColumnCount(3)
-        self.rank_table.setHorizontalHeaderLabels(["Spieler", "Siege", "Niederlagen"])
-        self.rank_table.horizontalHeader().setStretchLastSection(True)
-        self.rank_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.rank_table.setColumnCount(6)
+        self.rank_table.setHorizontalHeaderLabels(["#", "Spieler", "S", "N", "Sätze", "Diff"])
+        self.rank_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        for col in (0, 2, 3, 4, 5):
+            self.rank_table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         self.rank_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.rank_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.rank_table.setStyleSheet("""
             QTableWidget { background-color: #16213e; border: 2px solid #0f3460; border-radius: 10px; font-size: 16px; }
-            QHeaderView::section { background-color: #0f3460; color: #00d9ff; border: none; font-weight: bold; }
+            QHeaderView::section { background-color: #0f3460; color: #00d9ff; border: none; font-weight: bold; padding: 4px; }
             QTableWidget::item { padding: 8px; color: #ffffff; }
         """)
         right_layout.addWidget(self.rank_table)
@@ -2085,25 +2155,45 @@ class TurnierDetailPage(QWidget):
         self.turnier_id = turnier_id
         self.turnier_name = turnier_name
         self.title_label.setText(turnier_name)
-        
+
         if self.main_window and self.main_window.db:
             matches = self.main_window.db.get_turnier_matches(turnier_id)
             self.match_table.setRowCount(len(matches))
             for row, match in enumerate(matches):
                 match_id, spieler1, spieler2, score1, score2, datum = match
-                self.match_table.setItem(row, 0, QTableWidgetItem(spieler1))
+                item_s1 = QTableWidgetItem(spieler1)
+                item_s1.setData(Qt.ItemDataRole.UserRole, match_id)  # Speichere match_id in erster Spalte
+                self.match_table.setItem(row, 0, item_s1)
                 self.match_table.setItem(row, 1, QTableWidgetItem(spieler2))
-                self.match_table.setItem(row, 2, QTableWidgetItem(f"{score1}:{score2}"))
+                self.match_table.setItem(row, 2, QTableWidgetItem(f"{score1} : {score2}"))
                 datum_str = str(datum)[:16] if datum else "-"
                 self.match_table.setItem(row, 3, QTableWidgetItem(datum_str))
-            
+
             rangliste = self.main_window.db.get_rangliste(turnier_id)
             self.rank_table.setRowCount(len(rangliste))
             for row, eintrag in enumerate(rangliste):
-                name, siege, niederlagen = eintrag
-                self.rank_table.setItem(row, 0, QTableWidgetItem(name))
-                self.rank_table.setItem(row, 1, QTableWidgetItem(str(siege)))
-                self.rank_table.setItem(row, 2, QTableWidgetItem(str(niederlagen)))
+                name, siege, niederlagen, saetze_gew, saetze_verl, satzdiff = eintrag
+                platz_item = QTableWidgetItem(str(row + 1))
+                platz_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.rank_table.setItem(row, 0, platz_item)
+                self.rank_table.setItem(row, 1, QTableWidgetItem(name))
+                siege_item = QTableWidgetItem(str(siege))
+                siege_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.rank_table.setItem(row, 2, siege_item)
+                nied_item = QTableWidgetItem(str(niederlagen))
+                nied_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.rank_table.setItem(row, 3, nied_item)
+                saetze_item = QTableWidgetItem(f"{saetze_gew}:{saetze_verl}")
+                saetze_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.rank_table.setItem(row, 4, saetze_item)
+                diff_str = f"+{satzdiff}" if satzdiff > 0 else str(satzdiff)
+                diff_item = QTableWidgetItem(diff_str)
+                diff_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                if satzdiff > 0:
+                    diff_item.setForeground(Qt.GlobalColor.green)
+                elif satzdiff < 0:
+                    diff_item.setForeground(Qt.GlobalColor.red)
+                self.rank_table.setItem(row, 5, diff_item)
 
             gesamt = self.main_window.db.get_spieler_gesamt_stats(turnier_id)
             self.stats_table.setRowCount(len(gesamt))
@@ -2114,10 +2204,99 @@ class TurnierDetailPage(QWidget):
                 self.stats_table.setItem(row, 2, QTableWidgetItem(str(niederlagen_g)))
                 self.stats_table.setItem(row, 3, QTableWidgetItem(str(anz_turniere)))
     
+    def on_match_double_clicked(self, row, col):
+        """Zeigt Satz-Detailansicht für das angeklickte Match."""
+        item = self.match_table.item(row, 0)
+        if not item:
+            return
+        match_id = item.data(Qt.ItemDataRole.UserRole)
+        spieler1 = item.text()
+        spieler2_item = self.match_table.item(row, 1)
+        spieler2 = spieler2_item.text() if spieler2_item else ""
+        ergebnis_item = self.match_table.item(row, 2)
+        ergebnis = ergebnis_item.text() if ergebnis_item else ""
+        self.show_match_detail(match_id, spieler1, spieler2, ergebnis)
+
+    def show_match_detail(self, match_id, spieler1, spieler2, ergebnis):
+        """Öffnet einen Dialog mit den Einzel-Satz-Ergebnissen eines Matches."""
+        if not self.main_window or not self.main_window.db:
+            return
+        set_data = self.main_window.db.get_match_sets(match_id)
+
+        dialog = QDialog(self)
+        dialog.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        dialog.setMinimumWidth(480)
+        dialog.setStyleSheet("""
+            QDialog { background-color: #1a1a2e; border: 3px solid #00d9ff; border-radius: 15px; }
+            QLabel { color: #ffffff; }
+            QTableWidget { background-color: #16213e; border: 1px solid #0f3460; border-radius: 8px; font-size: 18px; color: #ffffff; }
+            QHeaderView::section { background-color: #0f3460; color: #00d9ff; border: none; font-weight: bold; padding: 6px; }
+            QTableWidget::item { padding: 10px; }
+        """)
+
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(15)
+        layout.setContentsMargins(25, 20, 25, 20)
+
+        title = QLabel(f"{spieler1}  vs  {spieler2}")
+        title.setStyleSheet("font-size: 22px; font-weight: bold; color: #00d9ff;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        result_label = QLabel(f"Endstand: {ergebnis}")
+        result_label.setStyleSheet("font-size: 18px; color: #888888;")
+        result_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(result_label)
+
+        if set_data:
+            table = QTableWidget()
+            table.setColumnCount(3)
+            table.setHorizontalHeaderLabels(["Satz", spieler1, spieler2])
+            table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+            table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+            table.verticalHeader().setVisible(False)
+            table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+            table.setRowCount(len(set_data))
+
+            for row, (set_nr, p1, p2) in enumerate(set_data):
+                satz_item = QTableWidgetItem(f"Satz {set_nr}")
+                satz_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                table.setItem(row, 0, satz_item)
+
+                p1_item = QTableWidgetItem(str(p1))
+                p1_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                if p1 > p2:
+                    p1_item.setForeground(Qt.GlobalColor.green)
+                table.setItem(row, 1, p1_item)
+
+                p2_item = QTableWidgetItem(str(p2))
+                p2_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                if p2 > p1:
+                    p2_item.setForeground(Qt.GlobalColor.green)
+                table.setItem(row, 2, p2_item)
+
+            table.setFixedHeight(min(len(set_data) * 48 + 40, 320))
+            layout.addWidget(table)
+        else:
+            no_data = QLabel("Keine Satz-Details verfügbar.")
+            no_data.setStyleSheet("font-size: 16px; color: #888888;")
+            no_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(no_data)
+
+        btn_close = QPushButton("Schließen")
+        btn_close.setMinimumHeight(55)
+        btn_close.setObjectName("primary")
+        btn_close.clicked.connect(dialog.accept)
+        layout.addWidget(btn_close)
+
+        dialog.exec()
+
     def on_back(self):
         if self.main_window:
             self.main_window.show_turnier_list()
-    
+
     def on_play_match(self):
         if self.main_window:
             self.main_window.start_turnier_match(self.turnier_id, self.turnier_name)
@@ -2143,7 +2322,8 @@ class ScoreboardPage(QWidget):
         self.sets2 = 0
         self.sets_to_win = 3  # Standard: Best of 5 (3 Gewinnsätze)
         self.turnier_id = None
-        
+        self.set_scores = []  # Liste von (punkte_s1, punkte_s2) je gewonnenem Satz
+
         # Aufschlag-Tracking: 1 = Spieler 1, 2 = Spieler 2
         self.server = 1
         self.initial_server = 1
@@ -2368,6 +2548,7 @@ class ScoreboardPage(QWidget):
         self.sets1 = 0
         self.sets2 = 0
         self.history = []
+        self.set_scores = []
 
         # Satz-Anzeigen nur bei Mehratz-Modi zeigen
         show_sets = sets_to_win > 1
@@ -2487,6 +2668,9 @@ class ScoreboardPage(QWidget):
             self.show_set_won(2)
     
     def show_set_won(self, player):
+        # Satz-Ergebnis festhalten (vor dem Reset)
+        self.set_scores.append((self.score1, self.score2))
+
         self.update_display()
         if self.sets1 >= self.sets_to_win:
             self.match_won(1)
@@ -2494,7 +2678,7 @@ class ScoreboardPage(QWidget):
             self.match_won(2)
         else:
             winner_name = self.player1_name if player == 1 else self.player2_name
-            
+
             # Konfetti auf der Gewinnerseite starten
             if player == 1 and self.confetti_overlay1:
                 self.confetti_overlay1.setGeometry(0, 0, self.player1_container.width(), self.player1_container.height())
@@ -2502,16 +2686,16 @@ class ScoreboardPage(QWidget):
             elif player == 2 and self.confetti_overlay2:
                 self.confetti_overlay2.setGeometry(0, 0, self.player2_container.width(), self.player2_container.height())
                 self.confetti_overlay2.start_confetti()
-            
+
             # Rahmenloses Popup für den Satzgewinn (stoppt Konfetti automatisch durch Klick)
             confirmed = show_custom_info_dialog(self, "Satz gewonnen!", f"{winner_name} gewinnt den Satz!\nStand: {self.sets1} : {self.sets2}", cancel_text="Zurück")
-            
+
             # Konfetti stoppen falls noch aktiv
             if self.confetti_overlay1:
                 self.confetti_overlay1.stop_confetti()
             if self.confetti_overlay2:
                 self.confetti_overlay2.stop_confetti()
-            
+
             if confirmed:
                 self.score1 = 0
                 self.score2 = 0
@@ -2520,7 +2704,9 @@ class ScoreboardPage(QWidget):
                 self.server = self.initial_server
                 self.update_display()
             else:
-                # ABBRECHEN: Exakt den letzten Punkt (der zum Satzgewinn führte) rückgängig machen
+                # ABBRECHEN: Satz-Ergebnis rückgängig + letzten Punkt zurücknehmen
+                if self.set_scores:
+                    self.set_scores.pop()
                 self.on_undo()
     
     def match_won(self, player):
@@ -2544,17 +2730,24 @@ class ScoreboardPage(QWidget):
             self.confetti_overlay2.stop_confetti()
         
         if confirmed:
-            # ERST JETZT in DB speichern
+            # ERST JETZT in DB speichern (inkl. Einzel-Satz-Ergebnisse)
             if self.main_window and self.main_window.db:
-                self.main_window.db.save_match_with_names(self.player1_name, self.player2_name, self.sets1, self.sets2, self.turnier_id)
-            
+                self.main_window.db.save_match_with_names(
+                    self.player1_name, self.player2_name,
+                    self.sets1, self.sets2,
+                    self.turnier_id,
+                    set_scores=self.set_scores
+                )
+
             if self.main_window:
                 if self.turnier_id and self.main_window.current_turnier_name:
                     self.main_window.show_turnier_detail(self.turnier_id, self.main_window.current_turnier_name)
                 else:
                     self.main_window.show_start_menu()
         else:
-            # ABBRECHEN: Exakt den letzten Punkt (der zum Matchgewinn führte) rückgängig machen
+            # ABBRECHEN: Satz-Ergebnis und letzten Punkt rückgängig machen
+            if self.set_scores:
+                self.set_scores.pop()
             self.on_undo()
     
     def on_undo(self):
