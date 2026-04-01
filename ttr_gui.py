@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem, QHeaderView, QAbstractItemView,
     QComboBox, QRadioButton, QButtonGroup, QCompleter, QDialog
 )
-from PyQt6.QtCore import Qt, QSize, QTimer, QPoint
+from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QKeyEvent
 import os
 
@@ -599,13 +599,9 @@ class FullscreenKeyboardPage(QWidget):
         
         # ===== Mitte: Eingabefeld mit Dropdown =====
         layout.addStretch()
-
-        # Wrap input row in a QWidget so we can map its position for the overlay
-        self.input_container = QWidget()
-        input_row = QHBoxLayout(self.input_container)
-        input_row.setContentsMargins(0, 0, 0, 0)
-        input_row.setSpacing(8)
-
+        
+        input_row = QHBoxLayout()
+        
         self.input_field = QLineEdit()
         self.input_field.setMinimumHeight(80)
         self.input_field.setStyleSheet("""
@@ -620,7 +616,7 @@ class FullscreenKeyboardPage(QWidget):
         """)
         self.input_field.setReadOnly(True)
         input_row.addWidget(self.input_field)
-
+        
         # Dropdown-Button für Vorschläge
         self.btn_dropdown = QPushButton("▼")
         self.btn_dropdown.setFixedSize(80, 80)
@@ -637,13 +633,35 @@ class FullscreenKeyboardPage(QWidget):
         """)
         self.btn_dropdown.clicked.connect(self.toggle_suggestions)
         input_row.addWidget(self.btn_dropdown)
-
-        layout.addWidget(self.input_container)
-
+        
+        layout.addLayout(input_row)
+        
+        # Vorschlagsliste (zunächst versteckt)
+        self.suggestions_list = QListWidget()
+        self.suggestions_list.setMaximumHeight(200)
+        self.suggestions_list.setStyleSheet("""
+            QListWidget {
+                background-color: #16213e;
+                color: white;
+                border: 2px solid #00d9ff;
+                border-radius: 10px;
+                font-size: 24px;
+                padding: 5px;
+            }
+            QListWidget::item {
+                padding: 12px;
+                border-bottom: 1px solid #0f3460;
+            }
+            QListWidget::item:selected {
+                background-color: #00d9ff;
+                color: #1a1a2e;
+            }
+        """)
+        self.suggestions_list.itemClicked.connect(self.on_suggestion_selected)
+        self.suggestions_list.hide()
+        layout.addWidget(self.suggestions_list)
+        
         layout.addSpacing(20)
-
-        # ===== Floating suggestions overlay (parented to page, not in layout) =====
-        self._build_suggestions_overlay()
         
         # ===== Tastatur =====
         keyboard_widget = QWidget()
@@ -756,107 +774,7 @@ class FullscreenKeyboardPage(QWidget):
         
         layout.addWidget(keyboard_widget)
         layout.addStretch()
-
-    def _build_suggestions_overlay(self):
-        """Build the floating suggestions panel parented directly to this widget."""
-        self.suggestions_overlay = QFrame(self)
-        self.suggestions_overlay.setStyleSheet("""
-            QFrame {
-                background-color: #16213e;
-                border: 2px solid #00d9ff;
-                border-radius: 10px;
-            }
-        """)
-        overlay_layout = QVBoxLayout(self.suggestions_overlay)
-        overlay_layout.setContentsMargins(4, 4, 4, 4)
-        overlay_layout.setSpacing(0)
-
-        _arrow_ss = """
-            QPushButton {
-                background-color: #0f3460;
-                color: #00d9ff;
-                border: none;
-                border-radius: 6px;
-                font-size: 20px;
-                font-weight: bold;
-            }
-            QPushButton:pressed { background-color: #1a4a80; }
-        """
-
-        self.btn_scroll_up = QPushButton("▲")
-        self.btn_scroll_up.setFixedHeight(40)
-        self.btn_scroll_up.setStyleSheet(_arrow_ss)
-        self.btn_scroll_up.clicked.connect(self._scroll_up)
-        overlay_layout.addWidget(self.btn_scroll_up)
-
-        self.suggestions_list = QListWidget()
-        self.suggestions_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.suggestions_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.suggestions_list.setStyleSheet("""
-            QListWidget {
-                background-color: #16213e;
-                color: white;
-                border: none;
-                font-size: 24px;
-                padding: 2px;
-            }
-            QListWidget::item {
-                padding: 12px;
-                border-bottom: 1px solid #0f3460;
-            }
-            QListWidget::item:selected {
-                background-color: #00d9ff;
-                color: #1a1a2e;
-            }
-        """)
-        self.suggestions_list.itemClicked.connect(self.on_suggestion_selected)
-        overlay_layout.addWidget(self.suggestions_list, 1)
-
-        self.btn_scroll_down = QPushButton("▼")
-        self.btn_scroll_down.setFixedHeight(40)
-        self.btn_scroll_down.setStyleSheet(_arrow_ss)
-        self.btn_scroll_down.clicked.connect(self._scroll_down)
-        overlay_layout.addWidget(self.btn_scroll_down)
-
-        self.suggestions_overlay.hide()
-
-    def _reposition_overlay(self):
-        """Position the overlay just below the input container."""
-        if not hasattr(self, 'input_container') or not hasattr(self, 'suggestions_overlay'):
-            return
-        pos = self.input_container.mapTo(self, QPoint(0, self.input_container.height()))
-        x = pos.x()
-        y = pos.y() + 4
-        w = self.input_container.width()
-        self.suggestions_overlay.setGeometry(x, y, w, 300)
-        self.suggestions_overlay.raise_()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._reposition_overlay()
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        self._reposition_overlay()
-
-    def _scroll_up(self):
-        """Move selection one row up."""
-        count = self.suggestions_list.count()
-        if count == 0:
-            return
-        row = self.suggestions_list.currentRow()
-        self.suggestions_list.setCurrentRow(max(0, row - 1))
-        self.suggestions_list.scrollToItem(self.suggestions_list.currentItem())
-
-    def _scroll_down(self):
-        """Move selection one row down."""
-        count = self.suggestions_list.count()
-        if count == 0:
-            return
-        row = self.suggestions_list.currentRow()
-        self.suggestions_list.setCurrentRow(min(count - 1, row + 1))
-        self.suggestions_list.scrollToItem(self.suggestions_list.currentItem())
-
+    
     def update_shift_button_style(self):
         """Aktualisiert Shift-Button Farbe basierend auf Status."""
         if self.shift_btn:
@@ -892,7 +810,7 @@ class FullscreenKeyboardPage(QWidget):
     def key_pressed(self, key):
         """Verarbeitet Tastendruck."""
         current = self.input_field.text()
-
+        
         if key == '⌫':
             self.input_field.setText(current[:-1])
         elif key == '⇧':
@@ -910,11 +828,7 @@ class FullscreenKeyboardPage(QWidget):
             if self.shift_active:
                 self.shift_active = False
                 self.update_shift_button_style()
-
-        # Live-filter overlay while it is open
-        if self.suggestions_overlay.isVisible():
-            self.update_suggestions()
-
+    
     def open_for_field(self, target_line_edit, callback, title="Eingabe", show_suggestions=True):
         """Öffnet Tastatur für ein bestimmtes Feld.
 
@@ -925,43 +839,42 @@ class FullscreenKeyboardPage(QWidget):
         self.callback = callback
         self.input_field.setText(target_line_edit.text())
         self.shift_active = False
-        self.suggestions_overlay.hide()
+        self.suggestions_list.hide()
         self.title_label.setText(title)
         self.btn_dropdown.setVisible(show_suggestions)
         if show_suggestions:
             self.load_suggestions()
         else:
             self.all_suggestions = []
-
+    
     def load_suggestions(self):
         """Lädt Spielervorschläge aus der Datenbank."""
         self.all_suggestions = []
         if self.main_window and self.main_window.db:
             spieler = self.main_window.db.get_spieler()
             self.all_suggestions = [f"{s[1]} {s[2]}" for s in spieler]
-
+    
     def toggle_suggestions(self):
         """Zeigt/versteckt die Vorschlagsliste."""
-        if self.suggestions_overlay.isVisible():
-            self.suggestions_overlay.hide()
+        if self.suggestions_list.isVisible():
+            self.suggestions_list.hide()
         else:
-            self._reposition_overlay()
             self.update_suggestions()
-            self.suggestions_overlay.show()
-            self.suggestions_overlay.raise_()
-
+            self.suggestions_list.show()
+    
     def update_suggestions(self):
         """Aktualisiert die Vorschlagsliste basierend auf der Eingabe."""
         self.suggestions_list.clear()
         current_text = self.input_field.text().lower()
+        
         for name in self.all_suggestions:
-            if current_text == "" or current_text in name.lower():
+            if name.lower().startswith(current_text) or current_text == "":
                 self.suggestions_list.addItem(name)
-
+    
     def on_suggestion_selected(self, item):
         """Übernimmt den ausgewählten Vorschlag."""
         self.input_field.setText(item.text())
-        self.suggestions_overlay.hide()
+        self.suggestions_list.hide()
     
     def on_confirm(self):
         """Bestätigt Eingabe und kehrt zurück."""
