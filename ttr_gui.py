@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QStackedWidget, QLineEdit, QFrame,
     QSizePolicy, QSpacerItem, QListWidget, QListWidgetItem, QTableWidget,
-    QTableWidgetItem, QHeaderView, QInputDialog, QAbstractItemView,
+    QTableWidgetItem, QHeaderView, QAbstractItemView,
     QComboBox, QRadioButton, QButtonGroup, QCompleter, QDialog
 )
 from PyQt6.QtCore import Qt, QSize, QTimer, QRectF
@@ -829,15 +829,23 @@ class FullscreenKeyboardPage(QWidget):
                 self.shift_active = False
                 self.update_shift_button_style()
     
-    def open_for_field(self, target_line_edit, callback, title="Eingabe"):
-        """Öffnet Tastatur für ein bestimmtes Feld."""
+    def open_for_field(self, target_line_edit, callback, title="Eingabe", show_suggestions=True):
+        """Öffnet Tastatur für ein bestimmtes Feld.
+
+        Args:
+            show_suggestions: False um Dropdown-Button und Vorschlagsliste zu verstecken.
+        """
         self.target_field = target_line_edit
         self.callback = callback
         self.input_field.setText(target_line_edit.text())
         self.shift_active = False
         self.suggestions_list.hide()
         self.title_label.setText(title)
-        self.load_suggestions()
+        self.btn_dropdown.setVisible(show_suggestions)
+        if show_suggestions:
+            self.load_suggestions()
+        else:
+            self.all_suggestions = []
     
     def load_suggestions(self):
         """Lädt Spielervorschläge aus der Datenbank."""
@@ -1250,9 +1258,193 @@ class NewTurnierDialog(QDialog):
                 parent_rect.center().x() - dialog.width() // 2,
                 parent_rect.center().y() - dialog.height() // 2
             )
-        
+
         result = dialog.exec() == QDialog.DialogCode.Accepted
         return dialog.result_name, dialog.result_sets, result
+
+
+# ==================== NEUES TURNIER: VOLLBILD ====================
+class NeuTurnierPage(QWidget):
+    """Vollbild-Ansicht zum Erstellen eines neuen Turniers.
+
+    Gleicher Look & Feel wie die Spielernamenseingabe mit der Fullscreen-Tastatur.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.main_window = parent
+        self.return_index = 1
+        self.on_created_callback = None
+        self.selected_sets = 3  # Default: Best of 5 (3 Gewinnsätze)
+        self._rules_buttons = []
+        self.setup_ui()
+
+    def setup_ui(self):
+        # Scope the background only to THIS widget, not to child buttons
+        self.setObjectName("NeuTurnierPage")
+        self.setStyleSheet("#NeuTurnierPage { background-color: #1a1a2e; }")
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(0)
+        layout.setContentsMargins(50, 40, 50, 40)
+
+        # ===== Titel =====
+        title = QLabel("Neues Turnier")
+        title.setStyleSheet("font-size: 32px; color: #00d9ff; font-weight: bold;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        layout.addStretch(1)
+
+        # ===== Turniername =====
+        lbl_name = QLabel("Turniername")
+        lbl_name.setStyleSheet("font-size: 20px; color: #888888; margin-bottom: 6px;")
+        layout.addWidget(lbl_name)
+
+        layout.addSpacing(8)
+
+        self.input_name = QLineEdit()
+        self.input_name.setMinimumHeight(80)
+        self.input_name.setReadOnly(True)
+        self.input_name.setPlaceholderText("Tippen zum Eingeben...")
+        self.input_name.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.input_name.setStyleSheet("""
+            QLineEdit {
+                background-color: #16213e;
+                color: white;
+                border: 3px solid #00d9ff;
+                border-radius: 15px;
+                padding: 15px;
+                font-size: 32px;
+            }
+            QLineEdit:focus { border-color: #00d9ff; }
+        """)
+        self.input_name.mousePressEvent = lambda e: self._open_keyboard()
+        layout.addWidget(self.input_name)
+
+        layout.addStretch(1)
+
+        # ===== Regeln =====
+        lbl_rules = QLabel("Regeln")
+        lbl_rules.setStyleSheet("font-size: 20px; color: #888888; margin-bottom: 6px;")
+        layout.addWidget(lbl_rules)
+
+        layout.addSpacing(8)
+
+        rules_layout = QHBoxLayout()
+        rules_layout.setSpacing(15)
+        for sets_val, label, sub in [(2, "Best of 3", "2 Gewinnsätze"),
+                                     (3, "Best of 5", "3 Gewinnsätze"),
+                                     (4, "Best of 7", "4 Gewinnsätze")]:
+            btn = QPushButton(f"{label}\n{sub}")
+            btn.setMinimumHeight(80)
+            btn.clicked.connect(lambda checked, v=sets_val: self._select_rules(v))
+            rules_layout.addWidget(btn)
+            self._rules_buttons.append((btn, sets_val))
+        layout.addLayout(rules_layout)
+
+        layout.addStretch(2)
+
+        # ===== Buttons =====
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(20)
+
+        btn_cancel = QPushButton("← Abbrechen")
+        btn_cancel.setMinimumHeight(75)
+        btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #16213e;
+                color: #ffffff;
+                border: 2px solid #0f3460;
+                border-radius: 15px;
+                font-size: 20px;
+            }
+            QPushButton:pressed { background-color: #0f3460; }
+        """)
+        btn_cancel.clicked.connect(self._on_cancel)
+        btn_layout.addWidget(btn_cancel)
+
+        btn_create = QPushButton("Turnier Erstellen")
+        btn_create.setMinimumHeight(75)
+        btn_create.setStyleSheet("""
+            QPushButton {
+                background-color: #00d9ff;
+                color: #1a1a2e;
+                border: none;
+                border-radius: 15px;
+                font-size: 20px;
+                font-weight: bold;
+            }
+            QPushButton:pressed { background-color: #00b8d4; }
+        """)
+        btn_create.clicked.connect(self._on_create)
+        btn_layout.addWidget(btn_create)
+
+        layout.addLayout(btn_layout)
+
+        self._update_rules_styles()
+
+    def _update_rules_styles(self):
+        for btn, val in self._rules_buttons:
+            if val == self.selected_sets:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #00d9ff;
+                        color: #1a1a2e;
+                        border: none;
+                        border-radius: 15px;
+                        font-size: 20px;
+                        font-weight: bold;
+                        padding: 10px;
+                    }
+                """)
+            else:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #16213e;
+                        color: #ffffff;
+                        border: 2px solid #0f3460;
+                        border-radius: 15px;
+                        font-size: 20px;
+                        padding: 10px;
+                    }
+                    QPushButton:pressed { background-color: #0f3460; }
+                """)
+
+    def _select_rules(self, sets_val):
+        self.selected_sets = sets_val
+        self._update_rules_styles()
+
+    def _open_keyboard(self):
+        if self.main_window:
+            self.main_window.show_keyboard_for_field(
+                self.input_name, 6, "Turniername", show_suggestions=False
+            )
+
+    def open(self, return_index, on_created_callback=None):
+        """Bereitet die Seite vor und setzt Return-Zustand."""
+        self.return_index = return_index
+        self.on_created_callback = on_created_callback
+        self.input_name.clear()
+        self.selected_sets = 3
+        self._update_rules_styles()
+
+    def _on_cancel(self):
+        if self.main_window:
+            self.main_window.stack.setCurrentIndex(self.return_index)
+
+    def _on_create(self):
+        name = self.input_name.text().strip()
+        if not name:
+            show_custom_info_dialog(self, "Fehler", "Bitte gib einen Turniernamen ein!")
+            return
+        tid = None
+        if self.main_window and self.main_window.db:
+            tid = self.main_window.db.create_turnier(name, self.selected_sets)
+        if self.on_created_callback:
+            self.on_created_callback(tid, name)
+        if self.main_window:
+            self.main_window.stack.setCurrentIndex(self.return_index)
 
 
 # ==================== DATENBANKVERBINDUNG ====================
@@ -1889,18 +2081,19 @@ class MatchSetupPage(QWidget):
                 self.combo_turnier.addItem(turnier_name, (turnier_id, sets))
     
     def on_new_turnier(self):
-        # Dialog für Name UND Gewinnsätze
-        name, sets, ok = NewTurnierDialog.get_turnier_info(self)
-        if ok and name.strip():
-            if self.main_window and self.main_window.db:
-                new_id = self.main_window.db.create_turnier(name.strip(), sets)
-                self.load_turniere()
-                # Neu erstelltes auswählen
-                for i in range(self.combo_turnier.count()):
-                    data = self.combo_turnier.itemData(i) # (id, sets)
-                    if data and data[0] == new_id:
-                        self.combo_turnier.setCurrentIndex(i)
-                        break
+        if not self.main_window:
+            return
+
+        def on_created(tid, name):
+            self.load_turniere()
+            # Neu erstelltes Turnier automatisch auswählen
+            for i in range(self.combo_turnier.count()):
+                data = self.combo_turnier.itemData(i)  # (id, sets)
+                if data and data[0] == tid:
+                    self.combo_turnier.setCurrentIndex(i)
+                    break
+
+        self.main_window.show_neu_turnier_page(return_index=1, on_created_callback=on_created)
     
     def clear_inputs(self):
         self.input_player1.clear()
@@ -2033,11 +2226,13 @@ class TurnierListPage(QWidget):
             self.main_window.show_start_menu()
     
     def on_new_turnier(self):
-        name, ok = QInputDialog.getText(self, "Neues Turnier", "Turniername:")
-        if ok and name.strip():
-            if self.main_window and self.main_window.db:
-                self.main_window.db.create_turnier(name.strip())
-                self.load_turniere()
+        if not self.main_window:
+            return
+
+        def on_created(tid, name):
+            self.load_turniere()
+
+        self.main_window.show_neu_turnier_page(return_index=2, on_created_callback=on_created)
     
     def on_turnier_selected(self, item):
         turnier_id = item.data(Qt.ItemDataRole.UserRole)
@@ -2789,23 +2984,30 @@ class TTRMainWindow(QMainWindow):
         self.page_turnier_detail = TurnierDetailPage(self)
         self.page_scoreboard = ScoreboardPage(self)
         self.page_keyboard = FullscreenKeyboardPage(self)  # Vollbild-Tastatur
-        
+        self.page_neu_turnier = NeuTurnierPage(self)       # Vollbild-Turniererstellung
+
         self.stack.addWidget(self.page_start)          # 0
         self.stack.addWidget(self.page_setup)          # 1
         self.stack.addWidget(self.page_turnier_list)   # 2
         self.stack.addWidget(self.page_turnier_detail) # 3
         self.stack.addWidget(self.page_scoreboard)     # 4
         self.stack.addWidget(self.page_keyboard)       # 5
-        
+        self.stack.addWidget(self.page_neu_turnier)    # 6
+
         self.stack.setCurrentIndex(0)
     
-    def show_keyboard_for_field(self, target_field, return_index, title="Eingabe"):
+    def show_keyboard_for_field(self, target_field, return_index, title="Eingabe", show_suggestions=True):
         """Öffnet Vollbild-Tastatur für ein Eingabefeld."""
         def on_keyboard_close():
             self.stack.setCurrentIndex(return_index)
-        
-        self.page_keyboard.open_for_field(target_field, on_keyboard_close, title)
+
+        self.page_keyboard.open_for_field(target_field, on_keyboard_close, title, show_suggestions=show_suggestions)
         self.stack.setCurrentIndex(5)
+
+    def show_neu_turnier_page(self, return_index, on_created_callback=None):
+        """Öffnet die Vollbild-Turniererstellungsseite."""
+        self.page_neu_turnier.open(return_index, on_created_callback)
+        self.stack.setCurrentIndex(6)
     
     def show_start_menu(self):
         self.current_turnier_id = None
