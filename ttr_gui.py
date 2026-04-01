@@ -19,8 +19,8 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem, QHeaderView, QAbstractItemView,
     QComboBox, QRadioButton, QButtonGroup, QCompleter, QDialog
 )
-from PyQt6.QtCore import Qt, QSize, QTimer, QRectF
-from PyQt6.QtGui import QFont, QColor, QPalette, QPixmap, QPainter, QBrush, QKeyEvent
+from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QKeyEvent
 import os
 
 try:
@@ -2291,166 +2291,358 @@ class TurnierDetailPage(QWidget):
         self.turnier_name = ""
         self.setup_ui()
     
+    # ── shared stylesheet fragments ────────────────────────────────────────
+    _SECTION_HEADER_SS = """
+        QWidget { background-color: #0d1b2e; border-radius: 6px; }
+        QLabel  { color: #00d9ff; font-size: 13px; font-weight: bold;
+                  letter-spacing: 1px; background: transparent; }
+    """
+    _MATCH_TABLE_SS = """
+        QTableWidget {
+            background-color: transparent;
+            border: none;
+            outline: 0;
+            gridline-color: transparent;
+        }
+        QTableWidget::item {
+            border-bottom: 1px solid #0d1b2e;
+            padding: 0px 6px;
+        }
+        QTableWidget::item:selected {
+            background-color: #0f3460;
+        }
+        QScrollBar:vertical {
+            background: #12192b; width: 6px; border-radius: 3px;
+        }
+        QScrollBar::handle:vertical {
+            background: #0f3460; border-radius: 3px; min-height: 20px;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+    """
+    _RANK_TABLE_SS = """
+        QTableWidget {
+            background-color: transparent;
+            border: none;
+            outline: 0;
+            gridline-color: transparent;
+        }
+        QHeaderView::section {
+            background-color: #0d1b2e;
+            color: #555e7a;
+            border: none;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            padding: 6px 4px;
+            text-transform: uppercase;
+        }
+        QTableWidget::item {
+            border-bottom: 1px solid #0d1b2e;
+            padding: 0px 4px;
+        }
+        QScrollBar:vertical {
+            background: #12192b; width: 6px; border-radius: 3px;
+        }
+        QScrollBar::handle:vertical {
+            background: #0f3460; border-radius: 3px; min-height: 20px;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+    """
+    _STATS_TABLE_SS = """
+        QTableWidget {
+            background-color: transparent;
+            border: none;
+            outline: 0;
+            gridline-color: transparent;
+        }
+        QHeaderView::section {
+            background-color: #0d1b2e;
+            color: #555e7a;
+            border: none;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            padding: 6px 4px;
+        }
+        QTableWidget::item {
+            border-bottom: 1px solid #0d1b2e;
+            padding: 0px 6px;
+        }
+    """
+    _CARD_SS   = "background-color: #12192b; border-radius: 10px;"
+    _ROW_H_MATCH = 52
+    _ROW_H_RANK  = 46
+
+    def _make_section_header(self, left_text, right_text=""):
+        bar = QWidget()
+        bar.setFixedHeight(36)
+        bar.setStyleSheet(self._SECTION_HEADER_SS)
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(10, 0, 10, 0)
+        lbl_l = QLabel(left_text.upper())
+        row.addWidget(lbl_l)
+        row.addStretch()
+        if right_text:
+            lbl_r = QLabel(right_text)
+            lbl_r.setStyleSheet("color: #3a4460; font-size: 12px; font-weight: normal; background: transparent;")
+            row.addWidget(lbl_r)
+        return bar
+
+    def _card_wrap(self, inner_widget):
+        """Wraps a widget in a card (rounded dark box)."""
+        card = QWidget()
+        card.setStyleSheet(self._CARD_SS)
+        l = QVBoxLayout(card)
+        l.setContentsMargins(0, 0, 0, 0)
+        l.setSpacing(0)
+        l.addWidget(inner_widget)
+        return card
+
     def setup_ui(self):
         layout = QVBoxLayout()
-        layout.setSpacing(15)
-        layout.setContentsMargins(30, 30, 30, 30)
-        
+        layout.setSpacing(10)
+        layout.setContentsMargins(20, 16, 20, 16)
+
+        # ── Title ─────────────────────────────────────────────────────────
         self.title_label = QLabel("Turnier")
-        self.title_label.setObjectName("title")
+        self.title_label.setStyleSheet(
+            "font-size: 26px; font-weight: bold; color: #00d9ff;"
+        )
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.title_label)
-        
-        content_layout = QHBoxLayout()
-        
-        # Matches Tabelle
-        left_widget = QWidget()
-        left_layout = QVBoxLayout(left_widget)
-        left_title = QLabel("Match-Historie  (Doppelklick = Satz-Detail)")
-        left_title.setStyleSheet("font-size: 20px; color: #00d9ff; font-weight: bold;")
-        left_layout.addWidget(left_title)
+
+        # ── Main two-column area ───────────────────────────────────────────
+        content = QHBoxLayout()
+        content.setSpacing(14)
+
+        # ══ LEFT: Match list ══════════════════════════════════════════════
+        left_col = QVBoxLayout()
+        left_col.setSpacing(4)
+        left_col.addWidget(self._make_section_header("Ergebnisse", "Antippen = Satz-Detail"))
 
         self.match_table = QTableWidget()
         self.match_table.setColumnCount(4)
-        self.match_table.setHorizontalHeaderLabels(["Spieler 1", "Spieler 2", "Ergebnis", "Datum"])
-        self.match_table.horizontalHeader().setStretchLastSection(True)
-        self.match_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        # 0: date  1: player1  2: score  3: player2
+        self.match_table.horizontalHeader().setVisible(False)
+        self.match_table.verticalHeader().setVisible(False)
         self.match_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.match_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.match_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.match_table.setShowGrid(False)
         self.match_table.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.match_table.setStyleSheet("""
-            QTableWidget { background-color: #16213e; border: 2px solid #0f3460; border-radius: 10px; font-size: 16px; }
-            QHeaderView::section { background-color: #0f3460; color: #00d9ff; border: none; font-weight: bold; }
-            QTableWidget::item { padding: 8px; color: #ffffff; }
-            QTableWidget::item:selected { background-color: #0f3460; color: #00d9ff; }
-        """)
-        self.match_table.cellDoubleClicked.connect(self.on_match_double_clicked)
-        left_layout.addWidget(self.match_table)
-        content_layout.addWidget(left_widget)
+        self.match_table.setStyleSheet(self._MATCH_TABLE_SS)
+        self.match_table.cellClicked.connect(self.on_match_double_clicked)
+        left_col.addWidget(self._card_wrap(self.match_table), 1)
 
-        # Rangliste
-        right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
-        right_title = QLabel("Rangliste")
-        right_title.setStyleSheet("font-size: 20px; color: #00d9ff; font-weight: bold;")
-        right_layout.addWidget(right_title)
+        left_container = QWidget()
+        left_container.setLayout(left_col)
+        content.addWidget(left_container, 55)
+
+        # ══ RIGHT: Ranking ════════════════════════════════════════════════
+        right_col = QVBoxLayout()
+        right_col.setSpacing(4)
+        right_col.addWidget(self._make_section_header("Rangliste"))
 
         self.rank_table = QTableWidget()
         self.rank_table.setColumnCount(6)
-        self.rank_table.setHorizontalHeaderLabels(["#", "Spieler", "S", "N", "Sätze", "Diff"])
+        self.rank_table.setHorizontalHeaderLabels(["#", "Spieler", "S", "N", "Sätze", "±"])
+        self.rank_table.horizontalHeader().setVisible(True)
+        self.rank_table.verticalHeader().setVisible(False)
         self.rank_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         for col in (0, 2, 3, 4, 5):
-            self.rank_table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+            self.rank_table.horizontalHeader().setSectionResizeMode(
+                col, QHeaderView.ResizeMode.ResizeToContents
+            )
         self.rank_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.rank_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.rank_table.setStyleSheet("""
-            QTableWidget { background-color: #16213e; border: 2px solid #0f3460; border-radius: 10px; font-size: 16px; }
-            QHeaderView::section { background-color: #0f3460; color: #00d9ff; border: none; font-weight: bold; padding: 4px; }
-            QTableWidget::item { padding: 8px; color: #ffffff; }
-        """)
-        right_layout.addWidget(self.rank_table)
-        content_layout.addWidget(right_widget)
-        
-        layout.addLayout(content_layout)
+        self.rank_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.rank_table.setShowGrid(False)
+        self.rank_table.setStyleSheet(self._RANK_TABLE_SS)
+        right_col.addWidget(self._card_wrap(self.rank_table), 1)
 
-        # Gesamt-Statistik der Spieler
-        stats_title = QLabel("Gesamt-Statistik der Spieler (alle Turniere)")
-        stats_title.setStyleSheet("font-size: 18px; color: #00d9ff; font-weight: bold; margin-top: 10px;")
-        layout.addWidget(stats_title)
+        right_container = QWidget()
+        right_container.setLayout(right_col)
+        content.addWidget(right_container, 45)
+
+        layout.addLayout(content, 1)
+
+        # ── Stats strip ───────────────────────────────────────────────────
+        stats_header = self._make_section_header("Spieler-Gesamtstatistik")
+        layout.addWidget(stats_header)
 
         self.stats_table = QTableWidget()
         self.stats_table.setColumnCount(4)
-        self.stats_table.setHorizontalHeaderLabels(["Spieler", "Siege (Gesamt)", "Niederlagen (Gesamt)", "Turniere"])
-        self.stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.stats_table.setHorizontalHeaderLabels(["Spieler", "Siege", "Niederlagen", "Turniere"])
+        self.stats_table.verticalHeader().setVisible(False)
+        self.stats_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for col in (1, 2, 3):
+            self.stats_table.horizontalHeader().setSectionResizeMode(
+                col, QHeaderView.ResizeMode.ResizeToContents
+            )
         self.stats_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.stats_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.stats_table.setMaximumHeight(160)
-        self.stats_table.setStyleSheet("""
-            QTableWidget { background-color: #16213e; border: 2px solid #0f3460; border-radius: 10px; font-size: 16px; }
-            QHeaderView::section { background-color: #0f3460; color: #00d9ff; border: none; font-weight: bold; }
-            QTableWidget::item { padding: 8px; color: #ffffff; }
-        """)
-        layout.addWidget(self.stats_table)
+        self.stats_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.stats_table.setShowGrid(False)
+        self.stats_table.setMaximumHeight(self._ROW_H_RANK * 4 + 30)
+        self.stats_table.setStyleSheet(self._STATS_TABLE_SS)
+        layout.addWidget(self._card_wrap(self.stats_table))
 
+        # ── Buttons ───────────────────────────────────────────────────────
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(12)
+
         btn_back = QPushButton("← Zurück")
-        btn_back.setMinimumHeight(60)
+        btn_back.setMinimumHeight(62)
         btn_back.clicked.connect(self.on_back)
         btn_layout.addWidget(btn_back)
 
         btn_play = QPushButton("Match spielen")
         btn_play.setObjectName("primary")
-        btn_play.setMinimumHeight(60)
+        btn_play.setMinimumHeight(62)
         btn_play.clicked.connect(self.on_play_match)
         btn_layout.addWidget(btn_play)
 
         layout.addLayout(btn_layout)
         self.setLayout(layout)
     
+    # ── colour constants ───────────────────────────────────────────────────
+    _C_WINNER  = "#ffffff"   # white + bold
+    _C_LOSER   = "#4a5570"   # muted blue-grey
+    _C_SCORE_W = "#00d9ff"   # cyan
+    _C_SCORE_L = "#4a5570"
+    _C_DATE    = "#3a4460"
+    _C_ROW_ODD = "#12192b"
+    _C_ROW_EVN = "#0e1525"
+    _MEDALS    = {0: "🥇", 1: "🥈", 2: "🥉"}
+
+    def _make_item(self, text, align=Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                   fg=None, bold=False, bg=None):
+        item = QTableWidgetItem(text)
+        item.setTextAlignment(align)
+        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        if fg:
+            item.setForeground(QColor(fg))
+        if bold:
+            f = QFont()
+            f.setBold(True)
+            item.setFont(f)
+        if bg:
+            item.setBackground(QColor(bg))
+        return item
+
+    def _set_row_bg(self, table, row, color):
+        brush = QBrush(QColor(color))
+        for col in range(table.columnCount()):
+            item = table.item(row, col)
+            if item:
+                item.setBackground(brush)
+
     def load_turnier(self, turnier_id, turnier_name):
         self.turnier_id = turnier_id
         self.turnier_name = turnier_name
         self.title_label.setText(turnier_name)
 
-        if self.main_window and self.main_window.db:
-            matches = self.main_window.db.get_turnier_matches(turnier_id)
-            self.match_table.setRowCount(len(matches))
-            for row, match in enumerate(matches):
-                match_id, spieler1, spieler2, score1, score2, datum = match
-                item_s1 = QTableWidgetItem(spieler1)
-                item_s1.setData(Qt.ItemDataRole.UserRole, match_id)  # Speichere match_id in erster Spalte
-                self.match_table.setItem(row, 0, item_s1)
-                self.match_table.setItem(row, 1, QTableWidgetItem(spieler2))
-                self.match_table.setItem(row, 2, QTableWidgetItem(f"{score1} : {score2}"))
-                datum_str = str(datum)[:16] if datum else "-"
-                self.match_table.setItem(row, 3, QTableWidgetItem(datum_str))
+        if not (self.main_window and self.main_window.db):
+            return
 
-            rangliste = self.main_window.db.get_rangliste(turnier_id)
-            self.rank_table.setRowCount(len(rangliste))
-            for row, eintrag in enumerate(rangliste):
-                name, siege, niederlagen, saetze_gew, saetze_verl, satzdiff = eintrag
-                platz_item = QTableWidgetItem(str(row + 1))
-                platz_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.rank_table.setItem(row, 0, platz_item)
-                self.rank_table.setItem(row, 1, QTableWidgetItem(name))
-                siege_item = QTableWidgetItem(str(siege))
-                siege_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.rank_table.setItem(row, 2, siege_item)
-                nied_item = QTableWidgetItem(str(niederlagen))
-                nied_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.rank_table.setItem(row, 3, nied_item)
-                saetze_item = QTableWidgetItem(f"{saetze_gew}:{saetze_verl}")
-                saetze_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.rank_table.setItem(row, 4, saetze_item)
-                diff_str = f"+{satzdiff}" if satzdiff > 0 else str(satzdiff)
-                diff_item = QTableWidgetItem(diff_str)
-                diff_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                if satzdiff > 0:
-                    diff_item.setForeground(Qt.GlobalColor.green)
-                elif satzdiff < 0:
-                    diff_item.setForeground(Qt.GlobalColor.red)
-                self.rank_table.setItem(row, 5, diff_item)
+        CENTER = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter
+        RIGHT  = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight
+        LEFT   = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
 
-            gesamt = self.main_window.db.get_spieler_gesamt_stats(turnier_id)
-            self.stats_table.setRowCount(len(gesamt))
-            for row, eintrag in enumerate(gesamt):
-                name, siege_g, niederlagen_g, anz_turniere = eintrag
-                self.stats_table.setItem(row, 0, QTableWidgetItem(name))
-                self.stats_table.setItem(row, 1, QTableWidgetItem(str(siege_g)))
-                self.stats_table.setItem(row, 2, QTableWidgetItem(str(niederlagen_g)))
-                self.stats_table.setItem(row, 3, QTableWidgetItem(str(anz_turniere)))
+        # ── Match-Historie ────────────────────────────────────────────────
+        matches = self.main_window.db.get_turnier_matches(turnier_id)
+        self.match_table.setRowCount(len(matches))
+
+        # Column widths: date=88 | p1=stretch | score=68 | p2=stretch
+        self.match_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        self.match_table.setColumnWidth(0, 88)
+        self.match_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.match_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self.match_table.setColumnWidth(2, 68)
+        self.match_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+
+        for row, match in enumerate(matches):
+            match_id, spieler1, spieler2, score1, score2, datum = match
+            row_bg = self._C_ROW_ODD if row % 2 == 0 else self._C_ROW_EVN
+            p1_won = score1 > score2
+
+            # Date column (col 0)
+            datum_str = str(datum)[5:16] if datum else "-"   # "MM-DD HH:MM"
+            date_item = self._make_item(datum_str, CENTER, fg=self._C_DATE, bg=row_bg)
+            date_item.setData(Qt.ItemDataRole.UserRole, match_id)
+            self.match_table.setItem(row, 0, date_item)
+
+            # Player 1 (col 1) — right-aligned
+            p1_item = self._make_item(
+                spieler1, RIGHT,
+                fg=self._C_WINNER if p1_won else self._C_LOSER,
+                bold=p1_won, bg=row_bg
+            )
+            self.match_table.setItem(row, 1, p1_item)
+
+            # Score (col 2) — centre, winner side cyan
+            score_text = f"{score1}  :  {score2}"
+            score_item = self._make_item(score_text, CENTER, fg=self._C_SCORE_W, bold=True, bg=row_bg)
+            self.match_table.setItem(row, 2, score_item)
+
+            # Player 2 (col 3) — left-aligned
+            p2_item = self._make_item(
+                spieler2, LEFT,
+                fg=self._C_WINNER if not p1_won else self._C_LOSER,
+                bold=not p1_won, bg=row_bg
+            )
+            self.match_table.setItem(row, 3, p2_item)
+
+            self.match_table.setRowHeight(row, self._ROW_H_MATCH)
+
+        # ── Rangliste ─────────────────────────────────────────────────────
+        rangliste = self.main_window.db.get_rangliste(turnier_id)
+        self.rank_table.setRowCount(len(rangliste))
+
+        for row, eintrag in enumerate(rangliste):
+            name, siege, niederlagen, saetze_gew, saetze_verl, satzdiff = eintrag
+            row_bg = self._C_ROW_ODD if row % 2 == 0 else self._C_ROW_EVN
+
+            medal = self._MEDALS.get(row, "")
+            rank_text = f"{medal} {row + 1}" if medal else f"  {row + 1}"
+            self.rank_table.setItem(row, 0, self._make_item(rank_text, CENTER, fg="#888888", bg=row_bg))
+
+            name_fg = "#ffffff" if row == 0 else "#cccccc"
+            self.rank_table.setItem(row, 1, self._make_item(name, LEFT, fg=name_fg, bold=(row == 0), bg=row_bg))
+
+            self.rank_table.setItem(row, 2, self._make_item(str(siege), CENTER, fg="#00d9ff", bold=True, bg=row_bg))
+            self.rank_table.setItem(row, 3, self._make_item(str(niederlagen), CENTER, fg=self._C_LOSER, bg=row_bg))
+            self.rank_table.setItem(row, 4, self._make_item(f"{saetze_gew}:{saetze_verl}", CENTER, fg="#888888", bg=row_bg))
+
+            diff_str = f"+{satzdiff}" if satzdiff > 0 else str(satzdiff)
+            diff_fg = "#00c853" if satzdiff > 0 else ("#e94560" if satzdiff < 0 else "#888888")
+            self.rank_table.setItem(row, 5, self._make_item(diff_str, CENTER, fg=diff_fg, bold=(satzdiff != 0), bg=row_bg))
+
+            self.rank_table.setRowHeight(row, self._ROW_H_RANK)
+
+        # ── Gesamt-Statistik ──────────────────────────────────────────────
+        gesamt = self.main_window.db.get_spieler_gesamt_stats(turnier_id)
+        self.stats_table.setRowCount(len(gesamt))
+
+        for row, eintrag in enumerate(gesamt):
+            name, siege_g, niederlagen_g, anz_turniere = eintrag
+            row_bg = self._C_ROW_ODD if row % 2 == 0 else self._C_ROW_EVN
+            self.stats_table.setItem(row, 0, self._make_item(name, LEFT, fg="#cccccc", bg=row_bg))
+            self.stats_table.setItem(row, 1, self._make_item(str(siege_g), CENTER, fg="#00d9ff", bold=True, bg=row_bg))
+            self.stats_table.setItem(row, 2, self._make_item(str(niederlagen_g), CENTER, fg=self._C_LOSER, bg=row_bg))
+            self.stats_table.setItem(row, 3, self._make_item(str(anz_turniere), CENTER, fg="#888888", bg=row_bg))
+            self.stats_table.setRowHeight(row, self._ROW_H_RANK)
     
     def on_match_double_clicked(self, row, col):
         """Zeigt Satz-Detailansicht für das angeklickte Match."""
-        item = self.match_table.item(row, 0)
-        if not item:
+        date_item = self.match_table.item(row, 0)   # match_id stored here
+        if not date_item:
             return
-        match_id = item.data(Qt.ItemDataRole.UserRole)
-        spieler1 = item.text()
-        spieler2_item = self.match_table.item(row, 1)
-        spieler2 = spieler2_item.text() if spieler2_item else ""
-        ergebnis_item = self.match_table.item(row, 2)
-        ergebnis = ergebnis_item.text() if ergebnis_item else ""
+        match_id = date_item.data(Qt.ItemDataRole.UserRole)
+        p1_item = self.match_table.item(row, 1)
+        p2_item = self.match_table.item(row, 3)
+        score_item = self.match_table.item(row, 2)
+        spieler1 = p1_item.text().strip() if p1_item else ""
+        spieler2 = p2_item.text().strip() if p2_item else ""
+        ergebnis = score_item.text().strip() if score_item else ""
         self.show_match_detail(match_id, spieler1, spieler2, ergebnis)
 
     def show_match_detail(self, match_id, spieler1, spieler2, ergebnis):
@@ -2461,69 +2653,129 @@ class TurnierDetailPage(QWidget):
 
         dialog = QDialog(self)
         dialog.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        dialog.setMinimumWidth(480)
+        dialog.setMinimumWidth(520)
         dialog.setStyleSheet("""
-            QDialog { background-color: #1a1a2e; border: 3px solid #00d9ff; border-radius: 15px; }
-            QLabel { color: #ffffff; }
-            QTableWidget { background-color: #16213e; border: 1px solid #0f3460; border-radius: 8px; font-size: 18px; color: #ffffff; }
-            QHeaderView::section { background-color: #0f3460; color: #00d9ff; border: none; font-weight: bold; padding: 6px; }
-            QTableWidget::item { padding: 10px; }
+            QDialog { background-color: #0e1525; border: 2px solid #0f3460; border-radius: 14px; }
         """)
 
         layout = QVBoxLayout(dialog)
-        layout.setSpacing(15)
-        layout.setContentsMargins(25, 20, 25, 20)
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        title = QLabel(f"{spieler1}  vs  {spieler2}")
-        title.setStyleSheet("font-size: 22px; font-weight: bold; color: #00d9ff;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        # ── Header bar ────────────────────────────────────────────────────
+        header = QWidget()
+        header.setFixedHeight(56)
+        header.setStyleSheet("background-color: #0d1b2e; border-radius: 12px 12px 0 0;")
+        h_row = QHBoxLayout(header)
+        h_row.setContentsMargins(20, 0, 20, 0)
+        lbl_title = QLabel(f"{spieler1}   {ergebnis}   {spieler2}")
+        lbl_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        h_row.addWidget(lbl_title)
+        layout.addWidget(header)
 
-        result_label = QLabel(f"Endstand: {ergebnis}")
-        result_label.setStyleSheet("font-size: 18px; color: #888888;")
-        result_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(result_label)
+        # ── Set rows ──────────────────────────────────────────────────────
+        body = QWidget()
+        body.setStyleSheet("background-color: #0e1525;")
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(20, 12, 20, 12)
+        body_layout.setSpacing(0)
+
+        CENTER = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter
+        RIGHT  = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight
+        LEFT   = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
 
         if set_data:
             table = QTableWidget()
             table.setColumnCount(3)
-            table.setHorizontalHeaderLabels(["Satz", spieler1, spieler2])
-            table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-            table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-            table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+            table.horizontalHeader().setVisible(False)
             table.verticalHeader().setVisible(False)
             table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
             table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+            table.setShowGrid(False)
+            table.setStyleSheet("""
+                QTableWidget { background: transparent; border: none; }
+                QTableWidget::item { border-bottom: 1px solid #0d1b2e; padding: 4px 8px; }
+            """)
+            table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+            table.setColumnWidth(1, 80)
+            table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
             table.setRowCount(len(set_data))
 
-            for row, (set_nr, p1, p2) in enumerate(set_data):
-                satz_item = QTableWidgetItem(f"Satz {set_nr}")
-                satz_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                table.setItem(row, 0, satz_item)
+            # column header row (fake — first row with labels)
+            # Build a proper header widget above
+            hdr_w = QWidget()
+            hdr_w.setStyleSheet("background: #0d1b2e; border-radius: 6px;")
+            hdr_l = QHBoxLayout(hdr_w)
+            hdr_l.setContentsMargins(8, 4, 8, 4)
+            for txt, stretch in [(spieler1, 1), ("", 0), (spieler2, 1)]:
+                lbl = QLabel(txt)
+                lbl.setStyleSheet("color: #555e7a; font-size: 13px; font-weight: bold; letter-spacing: 1px;")
+                if txt == spieler1:
+                    lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                elif txt == spieler2:
+                    lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                else:
+                    lbl.setFixedWidth(80)
+                    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                hdr_l.addWidget(lbl, stretch)
+            body_layout.addWidget(hdr_w)
+            body_layout.addSpacing(4)
 
-                p1_item = QTableWidgetItem(str(p1))
-                p1_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                if p1 > p2:
-                    p1_item.setForeground(Qt.GlobalColor.green)
-                table.setItem(row, 1, p1_item)
+            for row_idx, (set_nr, p1, p2) in enumerate(set_data):
+                row_bg = "#12192b" if row_idx % 2 == 0 else "#0e1525"
+                p1_won = p1 > p2
 
-                p2_item = QTableWidgetItem(str(p2))
-                p2_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                if p2 > p1:
-                    p2_item.setForeground(Qt.GlobalColor.green)
-                table.setItem(row, 2, p2_item)
+                bold_f = QFont(); bold_f.setBold(True)
+                norm_f = QFont(); norm_f.setBold(False)
 
-            table.setFixedHeight(min(len(set_data) * 48 + 40, 320))
-            layout.addWidget(table)
+                # P1
+                i1 = QTableWidgetItem(str(p1))
+                i1.setTextAlignment(RIGHT)
+                i1.setForeground(QColor("#ffffff" if p1_won else "#4a5570"))
+                i1.setFont(bold_f if p1_won else norm_f)
+                i1.setBackground(QColor(row_bg))
+                table.setItem(row_idx, 0, i1)
+
+                # Set label centre
+                i_set = QTableWidgetItem(f"Satz {set_nr}")
+                i_set.setTextAlignment(CENTER)
+                i_set.setForeground(QColor("#3a4460"))
+                i_set.setBackground(QColor(row_bg))
+                table.setItem(row_idx, 1, i_set)
+
+                # P2
+                i2 = QTableWidgetItem(str(p2))
+                i2.setTextAlignment(LEFT)
+                i2.setForeground(QColor("#ffffff" if not p1_won else "#4a5570"))
+                i2.setFont(bold_f if not p1_won else norm_f)
+                i2.setBackground(QColor(row_bg))
+                table.setItem(row_idx, 2, i2)
+
+                table.setRowHeight(row_idx, 46)
+
+            table.setFixedHeight(len(set_data) * 46 + 4)
+            body_layout.addWidget(table)
         else:
-            no_data = QLabel("Keine Satz-Details verfügbar.")
-            no_data.setStyleSheet("font-size: 16px; color: #888888;")
-            no_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(no_data)
+            lbl = QLabel("Keine Satz-Details verfügbar.")
+            lbl.setStyleSheet("color: #4a5570; font-size: 15px; padding: 20px;")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            body_layout.addWidget(lbl)
 
+        layout.addWidget(body)
+
+        # ── Close button ──────────────────────────────────────────────────
         btn_close = QPushButton("Schließen")
-        btn_close.setMinimumHeight(55)
-        btn_close.setObjectName("primary")
+        btn_close.setMinimumHeight(52)
+        btn_close.setStyleSheet("""
+            QPushButton {
+                background-color: #0d1b2e; color: #00d9ff;
+                border: none; border-radius: 0 0 12px 12px;
+                font-size: 16px; font-weight: bold;
+            }
+            QPushButton:pressed { background-color: #0f3460; }
+        """)
         btn_close.clicked.connect(dialog.accept)
         layout.addWidget(btn_close)
 
