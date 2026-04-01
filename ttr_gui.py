@@ -13,7 +13,7 @@ import random
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QStackedWidget, QLineEdit, QFrame,
     QSizePolicy, QSpacerItem, QListWidget, QListWidgetItem, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView,
@@ -1723,6 +1723,47 @@ class DatabaseManager:
             print(f"❌ Fehler beim Laden der Sätze: {e}")
             return []
 
+    def get_turnier_details(self, turnier_id):
+        """Gibt (id, name, erstellt_am, sets_to_win) eines Turniers zurück."""
+        if not MYSQL_AVAILABLE or not self.connection:
+            return None
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT id, name, erstellt_am, sets_to_win FROM turniere WHERE id = %s",
+                (turnier_id,)
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            return result
+        except Error as e:
+            print(f"❌ Fehler beim Laden des Turniers: {e}")
+            return None
+
+    def get_turnier_spieler(self, turnier_id):
+        """Gibt alle Spieler zurück, die bereits in diesem Turnier gespielt haben.
+
+        Returns:
+            Liste von (id, full_name)
+        """
+        if not MYSQL_AVAILABLE or not self.connection:
+            return []
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""
+                SELECT DISTINCT s.id, CONCAT(s.vorname, ' ', s.nachname) as name
+                FROM spieler s
+                JOIN matches m ON s.id = m.spieler1_id OR s.id = m.spieler2_id
+                WHERE m.turnier_id = %s
+                ORDER BY name
+            """, (turnier_id,))
+            result = cursor.fetchall()
+            cursor.close()
+            return result
+        except Error as e:
+            print(f"❌ Fehler beim Laden der Turnier-Spieler: {e}")
+            return []
+
     def get_spieler_gesamt_stats(self, turnier_id):
         """Gesamt-Statistik aller Spieler im Turnier über alle ihre Turniere."""
         if not MYSQL_AVAILABLE or not self.connection:
@@ -2497,7 +2538,239 @@ class TurnierDetailPage(QWidget):
             self.main_window.start_turnier_match(self.turnier_id, self.turnier_name)
 
 
-# ==================== SEITE 5: SCOREBOARD ====================
+# ==================== SEITE 5: TURNIER MATCH SETUP ====================
+class TurnierMatchSetupPage(QWidget):
+    """Spielerauswahl für ein Turnier-Match aus den bereits erfassten Spielern."""
+
+    _STYLE_P1 = """
+        QPushButton {
+            background-color: #00d9ff; color: #1a1a2e;
+            border: none; border-radius: 12px;
+            font-size: 22px; font-weight: bold; padding: 10px;
+        }
+    """
+    _STYLE_P2 = """
+        QPushButton {
+            background-color: #e94560; color: #ffffff;
+            border: none; border-radius: 12px;
+            font-size: 22px; font-weight: bold; padding: 10px;
+        }
+    """
+    _STYLE_DEFAULT = """
+        QPushButton {
+            background-color: #16213e; color: #ffffff;
+            border: 2px solid #0f3460; border-radius: 12px;
+            font-size: 22px; padding: 10px;
+        }
+        QPushButton:pressed { background-color: #0f3460; }
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.main_window = parent
+        self.turnier_id = None
+        self.turnier_name = ""
+        self.sets_to_win = 3
+        self.player1_name = None
+        self.player2_name = None
+        self._player_buttons = {}
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.setObjectName("TurnierMatchSetupPage")
+        self.setStyleSheet("#TurnierMatchSetupPage { background-color: #1a1a2e; }")
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        layout.setContentsMargins(50, 30, 50, 30)
+
+        # ===== Titel =====
+        self.title_label = QLabel("Match starten")
+        self.title_label.setStyleSheet("font-size: 26px; color: #00d9ff; font-weight: bold;")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.title_label)
+
+        # ===== Auswahlzeile: P1 | VS | P2 =====
+        sel_layout = QHBoxLayout()
+        sel_layout.setSpacing(15)
+
+        p1_col = QVBoxLayout()
+        lbl_p1_title = QLabel("Spieler 1")
+        lbl_p1_title.setStyleSheet("font-size: 18px; color: #00d9ff; font-weight: bold;")
+        lbl_p1_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        p1_col.addWidget(lbl_p1_title)
+        self.lbl_p1 = QLabel("---")
+        self.lbl_p1.setMinimumHeight(58)
+        self.lbl_p1.setStyleSheet("""
+            font-size: 22px; color: #1a1a2e; font-weight: bold;
+            background-color: #00d9ff; border-radius: 12px; padding: 10px;
+        """)
+        self.lbl_p1.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        p1_col.addWidget(self.lbl_p1)
+        sel_layout.addLayout(p1_col, 1)
+
+        vs = QLabel("VS")
+        vs.setStyleSheet("font-size: 28px; color: #e94560; font-weight: bold;")
+        vs.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        vs.setFixedWidth(55)
+        sel_layout.addWidget(vs)
+
+        p2_col = QVBoxLayout()
+        lbl_p2_title = QLabel("Spieler 2")
+        lbl_p2_title.setStyleSheet("font-size: 18px; color: #e94560; font-weight: bold;")
+        lbl_p2_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        p2_col.addWidget(lbl_p2_title)
+        self.lbl_p2 = QLabel("---")
+        self.lbl_p2.setMinimumHeight(58)
+        self.lbl_p2.setStyleSheet("""
+            font-size: 22px; color: #ffffff; font-weight: bold;
+            background-color: #e94560; border-radius: 12px; padding: 10px;
+        """)
+        self.lbl_p2.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        p2_col.addWidget(self.lbl_p2)
+        sel_layout.addLayout(p2_col, 1)
+
+        layout.addLayout(sel_layout)
+
+        # ===== Hinweis =====
+        hint = QLabel("1. Spieler 1 antippen  →  2. Spieler 2 antippen  ·  Erneut antippen = Abwählen")
+        hint.setStyleSheet("font-size: 15px; color: #555555;")
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(hint)
+
+        # ===== Spieler-Grid =====
+        self.players_container = QWidget()
+        self.players_grid = QGridLayout(self.players_container)
+        self.players_grid.setSpacing(12)
+        layout.addWidget(self.players_container, 1)
+
+        # ===== Buttons =====
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(20)
+
+        btn_back = QPushButton("← Zurück")
+        btn_back.setMinimumHeight(70)
+        btn_back.setStyleSheet("""
+            QPushButton {
+                background-color: #16213e; color: #ffffff;
+                border: 2px solid #0f3460; border-radius: 15px; font-size: 20px;
+            }
+            QPushButton:pressed { background-color: #0f3460; }
+        """)
+        btn_back.clicked.connect(self._on_back)
+        btn_row.addWidget(btn_back)
+
+        self.btn_start = QPushButton("Match Starten")
+        self.btn_start.setMinimumHeight(70)
+        self.btn_start.setEnabled(False)
+        self.btn_start.setStyleSheet("""
+            QPushButton {
+                background-color: #00d9ff; color: #1a1a2e;
+                border: none; border-radius: 15px; font-size: 20px; font-weight: bold;
+            }
+            QPushButton:disabled {
+                background-color: #16213e; color: #444444; border: 2px solid #0f3460;
+            }
+            QPushButton:pressed { background-color: #00b8d4; }
+        """)
+        self.btn_start.clicked.connect(self._on_start)
+        btn_row.addWidget(self.btn_start)
+
+        layout.addLayout(btn_row)
+
+    def load(self, turnier_id, turnier_name):
+        self.turnier_id = turnier_id
+        self.turnier_name = turnier_name
+        self.player1_name = None
+        self.player2_name = None
+        self._player_buttons = {}
+
+        # Fetch sets_to_win from DB
+        self.sets_to_win = 3
+        if self.main_window and self.main_window.db:
+            details = self.main_window.db.get_turnier_details(turnier_id)
+            if details:
+                self.sets_to_win = details[3] or 3
+
+        display = turnier_name[:40] + "..." if len(turnier_name) > 40 else turnier_name
+        self.title_label.setText(f"Match starten  ·  {display}")
+        self._update_selection_display()
+        self._load_players()
+
+    def _load_players(self):
+        # Clear old buttons
+        while self.players_grid.count():
+            item = self.players_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._player_buttons = {}
+
+        if not self.main_window or not self.main_window.db:
+            return
+
+        players = self.main_window.db.get_turnier_spieler(self.turnier_id)
+        cols = 3
+        for i, (pid, name) in enumerate(players):
+            btn = QPushButton(name)
+            btn.setMinimumHeight(70)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet(self._STYLE_DEFAULT)
+            btn.clicked.connect(lambda checked, n=name: self._on_player_tap(n))
+            self._player_buttons[name] = btn
+            self.players_grid.addWidget(btn, i // cols, i % cols)
+
+        self.btn_start.setEnabled(False)
+
+    def _on_player_tap(self, name):
+        if self.player1_name == name:
+            self.player1_name = None
+        elif self.player2_name == name:
+            self.player2_name = None
+        elif self.player1_name is None:
+            self.player1_name = name
+        else:
+            self.player2_name = name
+
+        self._update_selection_display()
+        self._update_button_styles()
+        self.btn_start.setEnabled(
+            self.player1_name is not None and self.player2_name is not None
+        )
+
+    def _update_selection_display(self):
+        self.lbl_p1.setText(self.player1_name or "---")
+        self.lbl_p2.setText(self.player2_name or "---")
+
+    def _update_button_styles(self):
+        for name, btn in self._player_buttons.items():
+            if name == self.player1_name:
+                btn.setStyleSheet(self._STYLE_P1)
+            elif name == self.player2_name:
+                btn.setStyleSheet(self._STYLE_P2)
+            else:
+                btn.setStyleSheet(self._STYLE_DEFAULT)
+
+    def _on_back(self):
+        if self.main_window:
+            self.main_window.show_turnier_detail(self.turnier_id, self.turnier_name)
+
+    def _on_start(self):
+        if not self.player1_name or not self.player2_name:
+            return
+        if self.main_window:
+            self.main_window.current_turnier_id = self.turnier_id
+            self.main_window.current_turnier_name = self.turnier_name
+            self.main_window.page_scoreboard.turnier_id = self.turnier_id
+            self.main_window.page_scoreboard.reset_match(
+                None, self.player1_name,
+                None, self.player2_name,
+                sets_to_win=self.sets_to_win
+            )
+            self.main_window.stack.setCurrentIndex(4)  # ScoreboardPage
+            self.main_window.page_scoreboard.setFocus()
+
+
+# ==================== SEITE 6: SCOREBOARD ====================
 class ScoreboardPage(QWidget):
     """Das Hauptspiel-Scoreboard."""
     
@@ -2983,8 +3256,9 @@ class TTRMainWindow(QMainWindow):
         self.page_turnier_list = TurnierListPage(self)
         self.page_turnier_detail = TurnierDetailPage(self)
         self.page_scoreboard = ScoreboardPage(self)
-        self.page_keyboard = FullscreenKeyboardPage(self)  # Vollbild-Tastatur
-        self.page_neu_turnier = NeuTurnierPage(self)       # Vollbild-Turniererstellung
+        self.page_keyboard = FullscreenKeyboardPage(self)      # Vollbild-Tastatur
+        self.page_neu_turnier = NeuTurnierPage(self)           # Vollbild-Turniererstellung
+        self.page_turnier_match = TurnierMatchSetupPage(self)  # Spielerauswahl Turnier
 
         self.stack.addWidget(self.page_start)          # 0
         self.stack.addWidget(self.page_setup)          # 1
@@ -2993,6 +3267,7 @@ class TTRMainWindow(QMainWindow):
         self.stack.addWidget(self.page_scoreboard)     # 4
         self.stack.addWidget(self.page_keyboard)       # 5
         self.stack.addWidget(self.page_neu_turnier)    # 6
+        self.stack.addWidget(self.page_turnier_match)  # 7
 
         self.stack.setCurrentIndex(0)
     
@@ -3037,8 +3312,8 @@ class TTRMainWindow(QMainWindow):
     def start_turnier_match(self, turnier_id, turnier_name):
         self.current_turnier_id = turnier_id
         self.current_turnier_name = turnier_name
-        self.page_setup.clear_inputs()
-        self.stack.setCurrentIndex(1)
+        self.page_turnier_match.load(turnier_id, turnier_name)
+        self.stack.setCurrentIndex(7)  # TurnierMatchSetupPage
     
     def closeEvent(self, event):
         self.db.disconnect()
