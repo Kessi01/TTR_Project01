@@ -173,9 +173,15 @@ def show_custom_confirm_dialog(parent, title, text):
        Returns: True bei Ja, False bei Nein.
     """
     from PyQt6.QtWidgets import QDialog, QLayout
-    
+
     dialog = QDialog(parent)
     dialog.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+
+    def _show_event(event):
+        QDialog.showEvent(dialog, event)
+        dialog.activateWindow()
+        dialog.raise_()
+    dialog.showEvent = _show_event
 
     def key_press(event: QKeyEvent):
         if event.key() == Qt.Key.Key_Right:
@@ -284,9 +290,15 @@ def show_custom_info_dialog(parent, title, text, cancel_text=None):
        Returns: True bei OK, False bei Abbrechen.
     """
     from PyQt6.QtWidgets import QDialog, QLayout
-    
+
     dialog = QDialog(parent)
     dialog.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+
+    def _show_event(event):
+        QDialog.showEvent(dialog, event)
+        dialog.activateWindow()
+        dialog.raise_()
+    dialog.showEvent = _show_event
 
     def key_press(event: QKeyEvent):
         if event.key() == Qt.Key.Key_Right:
@@ -3335,6 +3347,12 @@ class ScoreboardPage(QWidget):
             QDialog { background-color: #1a1a2e; border: 3px solid #00d9ff; border-radius: 15px; }
         """)
 
+        def _show_event(event):
+            QDialog.showEvent(dialog, event)
+            dialog.activateWindow()
+            dialog.raise_()
+        dialog.showEvent = _show_event
+
         def key_press(event: QKeyEvent):
             if event.key() == Qt.Key.Key_Right:
                 dialog.accept()
@@ -3466,6 +3484,13 @@ class ScoreboardPage(QWidget):
                     font-size: 20px; font-weight: bold; min-height: 65px; padding: 10px;
                 }
             """)
+
+            def _show_event(event):
+                QDialog.showEvent(dialog, event)
+                dialog.activateWindow()
+                dialog.raise_()
+            dialog.showEvent = _show_event
+
             # Buttonbreite: gross genug für "Seitenwechsel" (längster Text)
             # Dialog = 3 × btn_w + 2 × spacing(15) + 2 × margin(30)
             _btn_w = 190
