@@ -3046,11 +3046,19 @@ class ScoreboardPage(QWidget):
         self.confetti_overlay1 = None
         self.confetti_overlay2 = None
 
-        # Doppelklick-Tracking für Rückgängig (Pfeiltaste Rechts)
+        # Doppelklick-Tracking für Rückgängig (beide Pfeiltasten)
+        self.DOUBLE_CLICK_DELAY = 200
+
+        self._left_click_count = 0
+        self._left_click_timer = QTimer(self)
+        self._left_click_timer.setSingleShot(True)
+        self._left_click_timer.setInterval(self.DOUBLE_CLICK_DELAY)
+        self._left_click_timer.timeout.connect(self._commit_left_single)
+
         self._right_click_count = 0
         self._right_click_timer = QTimer(self)
         self._right_click_timer.setSingleShot(True)
-        self._right_click_timer.setInterval(250)
+        self._right_click_timer.setInterval(self.DOUBLE_CLICK_DELAY)
         self._right_click_timer.timeout.connect(self._commit_right_single)
 
         self.setup_ui()
@@ -3062,7 +3070,7 @@ class ScoreboardPage(QWidget):
 
     def keyPressEvent(self, event):
         """Pfeiltasten/Presenter: Rechts = Spieler 2, Links = Spieler 1.
-        Doppelklick Rechts = letzten Punkt rückgängig."""
+        Doppelklick = letzten Punkt rückgängig (beide Seiten)."""
         key = event.key()
         if key == Qt.Key.Key_Right:
             self._right_click_count += 1
@@ -3072,17 +3080,30 @@ class ScoreboardPage(QWidget):
                 self._right_click_timer.stop()
                 self._right_click_count = 0
                 self.on_undo()
+        elif key == Qt.Key.Key_Left:
+            self._left_click_count += 1
+            if self._left_click_count == 1:
+                self._left_click_timer.start()
+            elif self._left_click_count >= 2:
+                self._left_click_timer.stop()
+                self._left_click_count = 0
+                self.on_undo()
         elif key == Qt.Key.Key_PageDown:
             self.add_point(2)
-        elif key in (Qt.Key.Key_Left, Qt.Key.Key_PageUp):
+        elif key == Qt.Key.Key_PageUp:
             self.add_point(1)
         else:
             super().keyPressEvent(event)
 
     def _commit_right_single(self):
-        """Wird nach 250ms aufgerufen, wenn kein zweiter Klick kam → Punkt für Spieler 2."""
+        """Timer abgelaufen ohne zweiten Klick → Punkt für Spieler 2."""
         self._right_click_count = 0
         self.add_point(2)
+
+    def _commit_left_single(self):
+        """Timer abgelaufen ohne zweiten Klick → Punkt für Spieler 1."""
+        self._left_click_count = 0
+        self.add_point(1)
 
     def setup_ui(self):
         layout = QVBoxLayout()
