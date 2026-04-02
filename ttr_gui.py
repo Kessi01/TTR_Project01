@@ -3466,7 +3466,11 @@ class ScoreboardPage(QWidget):
                     font-size: 20px; font-weight: bold; min-height: 65px; padding: 10px;
                 }
             """)
-            dialog.setFixedWidth(520)
+            # Buttonbreite: gross genug für "Seitenwechsel" (längster Text)
+            # Dialog = 3 × btn_w + 2 × spacing(15) + 2 × margin(30)
+            _btn_w = 190
+            dialog.setFixedWidth(3 * _btn_w + 2 * 15 + 2 * 30)
+
             dlg_layout = QVBoxLayout(dialog)
             dlg_layout.setSpacing(20)
             dlg_layout.setContentsMargins(30, 30, 30, 30)
@@ -3482,21 +3486,24 @@ class ScoreboardPage(QWidget):
 
             btn_back = QPushButton("Zurück")
             btn_back.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            btn_back.setFixedWidth(_btn_w)
             btn_back.setStyleSheet("QPushButton { border: 3px solid #e94560; } QPushButton:hover { background-color: #e94560; }")
             btn_back.clicked.connect(lambda: dialog.done(0))
-            btn_row.addWidget(btn_back, 1)
+            btn_row.addWidget(btn_back)
 
             btn_seite = QPushButton("Seitenwechsel")
             btn_seite.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            btn_seite.setFixedWidth(_btn_w)
             btn_seite.setStyleSheet("QPushButton { border: 3px solid #f0c040; color: white; } QPushButton:hover { background-color: #f0c040; color: #1a1a2e; }")
             btn_seite.clicked.connect(lambda: dialog.done(2))
-            btn_row.addWidget(btn_seite, 1)
+            btn_row.addWidget(btn_seite)
 
             btn_ok = QPushButton("OK")
             btn_ok.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            btn_ok.setFixedWidth(_btn_w)
             btn_ok.setStyleSheet("QPushButton { border: 3px solid #00d9ff; } QPushButton:hover { background-color: #00d9ff; color: #1a1a2e; }")
             btn_ok.clicked.connect(lambda: dialog.done(1))
-            btn_row.addWidget(btn_ok, 1)
+            btn_row.addWidget(btn_ok)
 
             def key_press(event: QKeyEvent):
                 if event.key() == Qt.Key.Key_Right:
@@ -3613,7 +3620,11 @@ class ScoreboardPage(QWidget):
         self.setFocus()
 
     def on_quit(self):
-        # HIER: Neues, rahmenloses Popup beim Abbrechen
+        # Dropdown immer zuerst schliessen
+        self.dropdown_expanded = False
+        self.dropdown_buttons.setVisible(False)
+        self.update_dropdown_handle()
+
         if show_custom_confirm_dialog(self, 'Abbrechen', 'Match abbrechen ohne Speichern?'):
             if self.main_window:
                 if self.turnier_id and self.main_window.current_turnier_name:
