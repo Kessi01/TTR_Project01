@@ -3226,31 +3226,43 @@ class ScoreboardPage(QWidget):
         btn_layout.setSpacing(15)
         btn_layout.setContentsMargins(30, 15, 30, 20)
         
-        btn_quit = QPushButton("Abbrechen")
-        btn_quit.setObjectName("danger")
-        btn_quit.setMinimumHeight(55)
-        btn_quit.clicked.connect(self.on_quit)
-        btn_layout.addWidget(btn_quit)
-        
-        btn_undo = QPushButton("Rückgängig")
-        btn_undo.setMinimumHeight(55)
-        btn_undo.setStyleSheet("""
-            QPushButton {
+        _btn_style_base = """
+            QPushButton {{
                 background-color: #16213e;
                 color: #ffffff;
-                border: 2px solid #00d9ff;
+                border: 2px solid {color};
                 border-radius: 15px;
                 padding: 15px;
                 font-size: 18px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #00d9ff;
+            }}
+            QPushButton:hover {{
+                background-color: {color};
                 color: #1a1a2e;
-            }
-        """)
+            }}
+        """
+
+        btn_quit = QPushButton("Abbrechen")
+        btn_quit.setMinimumHeight(55)
+        btn_quit.setSizePolicy(
+            btn_quit.sizePolicy().horizontalPolicy(),
+            btn_quit.sizePolicy().verticalPolicy()
+        )
+        btn_quit.setStyleSheet(_btn_style_base.format(color="#e94560"))
+        btn_quit.clicked.connect(self.on_quit)
+        btn_layout.addWidget(btn_quit, 1)
+
+        btn_seite = QPushButton("Seitenwechsel")
+        btn_seite.setMinimumHeight(55)
+        btn_seite.setStyleSheet(_btn_style_base.format(color="#f0c040"))
+        btn_seite.clicked.connect(self.on_seitenwechsel)
+        btn_layout.addWidget(btn_seite, 1)
+
+        btn_undo = QPushButton("Rückgängig")
+        btn_undo.setMinimumHeight(55)
+        btn_undo.setStyleSheet(_btn_style_base.format(color="#00d9ff"))
         btn_undo.clicked.connect(self.on_undo)
-        btn_layout.addWidget(btn_undo)
+        btn_layout.addWidget(btn_undo, 1)
         
         layout.addWidget(self.dropdown_buttons)
         
@@ -3510,7 +3522,32 @@ class ScoreboardPage(QWidget):
         if self.history:
             self.score1, self.score2, self.sets1, self.sets2, self.server = self.history.pop()
             self.update_display()
-    
+        # Dropdown schliessen und Fokus zurücksetzen
+        self.dropdown_expanded = False
+        self.dropdown_buttons.setVisible(False)
+        self.update_dropdown_handle()
+        self.setFocus()
+
+    def on_seitenwechsel(self):
+        """Tauscht Spieler 1 und Spieler 2 komplett (Seiten, Punkte, Sätze, Aufschlag)."""
+        self.player1_id, self.player2_id = self.player2_id, self.player1_id
+        self.player1_name, self.player2_name = self.player2_name, self.player1_name
+        self.score1, self.score2 = self.score2, self.score1
+        self.sets1, self.sets2 = self.sets2, self.sets1
+        self.server = 1 if self.server == 2 else 2
+        self.initial_server = 1 if self.initial_server == 2 else 2
+        # History spiegeln: score1↔score2, sets1↔sets2, server flippen
+        self.history = [
+            (s2, s1, st2, st1, (1 if srv == 2 else 2))
+            for (s1, s2, st1, st2, srv) in self.history
+        ]
+        self.update_display()
+        # Dropdown schliessen und Fokus zurücksetzen
+        self.dropdown_expanded = False
+        self.dropdown_buttons.setVisible(False)
+        self.update_dropdown_handle()
+        self.setFocus()
+
     def on_quit(self):
         # HIER: Neues, rahmenloses Popup beim Abbrechen
         if show_custom_confirm_dialog(self, 'Abbrechen', 'Match abbrechen ohne Speichern?'):
