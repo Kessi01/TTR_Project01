@@ -3455,8 +3455,64 @@ class ScoreboardPage(QWidget):
                 self.confetti_overlay2.setGeometry(0, 0, self.player2_container.width(), self.player2_container.height())
                 self.confetti_overlay2.start_confetti()
 
-            # Rahmenloses Popup für den Satzgewinn (stoppt Konfetti automatisch durch Klick)
-            confirmed = show_custom_info_dialog(self, "Satz gewonnen!", f"{winner_name} gewinnt den Satz!\nStand: {self.sets1} : {self.sets2}", cancel_text="Zurück")
+            # Rahmenloses Drei-Button-Popup für den Satzgewinn
+            from PyQt6.QtWidgets import QDialog
+            dialog = QDialog(self)
+            dialog.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+            dialog.setStyleSheet("""
+                QDialog { background-color: #1a1a2e; border: 3px solid #00d9ff; border-radius: 15px; }
+                QPushButton {
+                    background-color: #16213e; color: white; border-radius: 10px;
+                    font-size: 20px; font-weight: bold; min-height: 65px; padding: 10px;
+                }
+            """)
+            dialog.setFixedWidth(520)
+            dlg_layout = QVBoxLayout(dialog)
+            dlg_layout.setSpacing(20)
+            dlg_layout.setContentsMargins(30, 30, 30, 30)
+
+            lbl = QLabel(f"{winner_name} gewinnt den Satz!\nStand: {self.sets1} : {self.sets2}")
+            lbl.setStyleSheet("color: white; font-size: 22px; font-weight: bold; background: transparent; border: none;")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setWordWrap(True)
+            dlg_layout.addWidget(lbl)
+
+            btn_row = QHBoxLayout()
+            btn_row.setSpacing(15)
+
+            btn_back = QPushButton("Zurück")
+            btn_back.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            btn_back.setStyleSheet("QPushButton { border: 3px solid #e94560; } QPushButton:hover { background-color: #e94560; }")
+            btn_back.clicked.connect(lambda: dialog.done(0))
+            btn_row.addWidget(btn_back, 1)
+
+            btn_seite = QPushButton("Seitenwechsel")
+            btn_seite.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            btn_seite.setStyleSheet("QPushButton { border: 3px solid #f0c040; color: white; } QPushButton:hover { background-color: #f0c040; color: #1a1a2e; }")
+            btn_seite.clicked.connect(lambda: dialog.done(2))
+            btn_row.addWidget(btn_seite, 1)
+
+            btn_ok = QPushButton("OK")
+            btn_ok.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            btn_ok.setStyleSheet("QPushButton { border: 3px solid #00d9ff; } QPushButton:hover { background-color: #00d9ff; color: #1a1a2e; }")
+            btn_ok.clicked.connect(lambda: dialog.done(1))
+            btn_row.addWidget(btn_ok, 1)
+
+            def key_press(event: QKeyEvent):
+                if event.key() == Qt.Key.Key_Right:
+                    dialog.done(1)
+                elif event.key() == Qt.Key.Key_Left:
+                    dialog.done(0)
+                else:
+                    QDialog.keyPressEvent(dialog, event)
+            dialog.keyPressEvent = key_press
+
+            wrapper = QWidget()
+            wrapper.setLayout(btn_row)
+            wrapper.setStyleSheet("background: transparent; border: none;")
+            dlg_layout.addWidget(wrapper)
+
+            result = dialog.exec()
 
             # Konfetti stoppen falls noch aktiv
             if self.confetti_overlay1:
@@ -3464,15 +3520,23 @@ class ScoreboardPage(QWidget):
             if self.confetti_overlay2:
                 self.confetti_overlay2.stop_confetti()
 
-            if confirmed:
+            if result == 1:
+                # OK: neuer Satz, kein Seitenwechsel
                 self.score1 = 0
                 self.score2 = 0
-                # Aufschlag wechselt nach jedem Satz
                 self.initial_server = 1 if self.initial_server == 2 else 2
                 self.server = self.initial_server
                 self.update_display()
+            elif result == 2:
+                # Seitenwechsel: neuer Satz + Seiten tauschen
+                self.score1 = 0
+                self.score2 = 0
+                self.initial_server = 1 if self.initial_server == 2 else 2
+                self.server = self.initial_server
+                self.update_display()
+                self.on_seitenwechsel()
             else:
-                # ABBRECHEN: Satz-Ergebnis rückgängig + letzten Punkt zurücknehmen
+                # Zurück: Satz-Ergebnis rückgängig + letzten Punkt zurücknehmen
                 if self.set_scores:
                     self.set_scores.pop()
                 self.on_undo()
