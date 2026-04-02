@@ -3639,13 +3639,21 @@ class TTRMainWindow(QMainWindow):
         super().__init__()
         self.db = DatabaseManager()
         self.db.connect()
-        
+
         self.current_turnier_id = None
         self.current_turnier_name = None
-        
+
         self.setup_ui()
         self.setWindowTitle("TTR - Table Tennis Referee")
         self.setMinimumSize(800, 600)
+
+    def changeEvent(self, event):
+        """Kiosk-Fix: Fenster sofort re-aktivieren wenn es den Fokus verliert,
+        damit Touch-Events nie einen 'Aktivierungs-Tap' verbrauchen."""
+        super().changeEvent(event)
+        from PyQt6.QtCore import QEvent as _QEvent
+        if event.type() == _QEvent.Type.ActivationChange and not self.isActiveWindow():
+            QTimer.singleShot(0, self.activateWindow)
     
     def setup_ui(self):
         self.stack = QStackedWidget()
@@ -3723,6 +3731,9 @@ class TTRMainWindow(QMainWindow):
 # ==================== HAUPTPROGRAMM ====================
 def main():
     app = QApplication(sys.argv)
+    # Touch-Fix: Stellt sicher, dass Touch-Events sofort als Maus-Events
+    # verarbeitet werden, ohne einen separaten Aktivierungs-Tap zu benötigen.
+    app.setAttribute(Qt.ApplicationAttribute.AA_SynthesizeMouseForUnhandledTouchEvents, True)
     app.setStyleSheet(DARK_STYLESHEET)
     
     font = QFont()
