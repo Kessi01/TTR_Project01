@@ -3046,6 +3046,13 @@ class ScoreboardPage(QWidget):
         self.confetti_overlay1 = None
         self.confetti_overlay2 = None
 
+        # Doppelklick-Tracking für Rückgängig (Pfeiltaste Rechts)
+        self._right_click_count = 0
+        self._right_click_timer = QTimer(self)
+        self._right_click_timer.setSingleShot(True)
+        self._right_click_timer.setInterval(250)
+        self._right_click_timer.timeout.connect(self._commit_right_single)
+
         self.setup_ui()
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
@@ -3054,14 +3061,28 @@ class ScoreboardPage(QWidget):
         QTimer.singleShot(100, self.setFocus)
 
     def keyPressEvent(self, event):
-        """Pfeiltasten/Presenter: Rechts = Spieler 2, Links = Spieler 1."""
+        """Pfeiltasten/Presenter: Rechts = Spieler 2, Links = Spieler 1.
+        Doppelklick Rechts = letzten Punkt rückgängig."""
         key = event.key()
-        if key in (Qt.Key.Key_Right, Qt.Key.Key_PageDown):
+        if key == Qt.Key.Key_Right:
+            self._right_click_count += 1
+            if self._right_click_count == 1:
+                self._right_click_timer.start()
+            elif self._right_click_count >= 2:
+                self._right_click_timer.stop()
+                self._right_click_count = 0
+                self.on_undo()
+        elif key == Qt.Key.Key_PageDown:
             self.add_point(2)
         elif key in (Qt.Key.Key_Left, Qt.Key.Key_PageUp):
             self.add_point(1)
         else:
             super().keyPressEvent(event)
+
+    def _commit_right_single(self):
+        """Wird nach 250ms aufgerufen, wenn kein zweiter Klick kam → Punkt für Spieler 2."""
+        self._right_click_count = 0
+        self.add_point(2)
 
     def setup_ui(self):
         layout = QVBoxLayout()
