@@ -2896,6 +2896,26 @@ class TurnierMatchSetupPage(QWidget):
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(hint)
 
+        # ===== Neuer Spieler Button =====
+        btn_new_player = QPushButton("+ Neuer Spieler")
+        btn_new_player.setMinimumHeight(55)
+        btn_new_player.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_new_player.setStyleSheet("""
+            QPushButton {
+                background-color: #16213e; color: #00d9ff;
+                border: 2px dashed #00d9ff; border-radius: 12px;
+                font-size: 18px; font-weight: bold;
+            }
+            QPushButton:pressed { background-color: #0f3460; }
+        """)
+        btn_new_player.clicked.connect(self._open_new_player_keyboard)
+        layout.addWidget(btn_new_player)
+
+        # Verstecktes Feld als Ziel für die Vollbild-Tastatur
+        self.input_new_player = QLineEdit()
+        self.input_new_player.hide()
+        self.input_new_player.textChanged.connect(self._on_new_player_entered)
+
         # ===== Spieler-Grid =====
         self.players_container = QWidget()
         self.players_grid = QGridLayout(self.players_container)
@@ -2966,7 +2986,8 @@ class TurnierMatchSetupPage(QWidget):
         if not self.main_window or not self.main_window.db:
             return
 
-        players = self.main_window.db.get_turnier_spieler(self.turnier_id)
+        raw_players = self.main_window.db.get_spieler()
+        players = [(pid, f"{vorname} {nachname}".strip()) for pid, vorname, nachname in raw_players]
         cols = 3
         for i, (pid, name) in enumerate(players):
             btn = QPushButton(name)
@@ -3007,6 +3028,26 @@ class TurnierMatchSetupPage(QWidget):
                 btn.setStyleSheet(self._STYLE_P2)
             else:
                 btn.setStyleSheet(self._STYLE_DEFAULT)
+
+    def _open_new_player_keyboard(self):
+        if not self.main_window:
+            return
+        self.input_new_player.blockSignals(True)
+        self.input_new_player.clear()
+        self.input_new_player.blockSignals(False)
+        self.main_window.show_keyboard_for_field(
+            self.input_new_player, 7, "Neuer Spieler", show_suggestions=False
+        )
+
+    def _on_new_player_entered(self, text):
+        name = text.strip()
+        if not name or not self.main_window or not self.main_window.db:
+            return
+        spieler_id = self.main_window.db.get_or_create_spieler(name)
+        if spieler_id is None:
+            show_custom_info_dialog(self, "Fehler", f"Spieler '{name}' konnte nicht angelegt werden!")
+            return
+        self._load_players()
 
     def _on_back(self):
         if self.main_window:
@@ -3596,12 +3637,20 @@ class ScoreboardPage(QWidget):
         if confirmed:
             # ERST JETZT in DB speichern (inkl. Einzel-Satz-Ergebnisse)
             if self.main_window and self.main_window.db:
-                self.main_window.db.save_match_with_names(
+                saved = self.main_window.db.save_match_with_names(
                     self.player1_name, self.player2_name,
                     self.sets1, self.sets2,
                     self.turnier_id,
                     set_scores=self.set_scores
                 )
+                if not saved:
+                    show_custom_info_dialog(
+                        self, "Fehler beim Speichern",
+                        f"Das Match-Ergebnis ({winner_name} gewinnt {self.sets1}:{self.sets2}) "
+                        "konnte NICHT in der Datenbank gespeichert werden!\n"
+                        "Bitte Ergebnis notieren und Datenbankverbindung prüfen.",
+                        cancel_text=None
+                    )
 
             if self.main_window:
                 if self.turnier_id and self.main_window.current_turnier_name:
