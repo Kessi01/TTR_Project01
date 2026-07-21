@@ -874,9 +874,14 @@ class FullscreenKeyboardPage(QWidget):
                 item.widget().deleteLater()
 
         current_text = self.input_field.text().lower()
+        max_suggestions = 3
+        shown = 0
 
         for name in self.all_suggestions:
+            if shown >= max_suggestions:
+                break
             if name.lower().startswith(current_text) or current_text == "":
+                shown += 1
                 btn = QPushButton(name)
                 btn.setMinimumHeight(60)
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
