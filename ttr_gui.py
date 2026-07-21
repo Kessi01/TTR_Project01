@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QStackedWidget, QLineEdit, QFrame,
     QSizePolicy, QSpacerItem, QListWidget, QListWidgetItem, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QComboBox, QRadioButton, QButtonGroup, QCompleter, QDialog
+    QComboBox, QRadioButton, QButtonGroup, QCompleter, QDialog, QScrollArea
 )
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QKeyEvent
@@ -644,30 +644,26 @@ class FullscreenKeyboardPage(QWidget):
         
         layout.addLayout(input_row)
         
-        # Vorschlagsliste (zunächst versteckt)
-        self.suggestions_list = QListWidget()
-        self.suggestions_list.setMaximumHeight(200)
-        self.suggestions_list.setStyleSheet("""
-            QListWidget {
-                background-color: #16213e;
-                color: white;
-                border: 2px solid #00d9ff;
-                border-radius: 10px;
-                font-size: 24px;
-                padding: 5px;
-            }
-            QListWidget::item {
-                padding: 12px;
-                border-bottom: 1px solid #0f3460;
-            }
-            QListWidget::item:selected {
-                background-color: #00d9ff;
-                color: #1a1a2e;
-            }
+        # Vorschlagsliste als grosse, antippbare Buttons (zunächst versteckt)
+        self.suggestions_area = QScrollArea()
+        self.suggestions_area.setWidgetResizable(True)
+        self.suggestions_area.setMaximumHeight(260)
+        self.suggestions_area.setStyleSheet("""
+            QScrollArea { background-color: #16213e; border: 2px solid #00d9ff; border-radius: 10px; }
+            QScrollBar:vertical { background: #16213e; width: 40px; border-radius: 12px; margin: 0px; }
+            QScrollBar::handle:vertical { background: #0f3460; border-radius: 12px; min-height: 30px; }
+            QScrollBar::handle:vertical:pressed { background: #00d9ff; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
         """)
-        self.suggestions_list.itemClicked.connect(self.on_suggestion_selected)
-        self.suggestions_list.hide()
-        layout.addWidget(self.suggestions_list)
+        self.suggestions_container = QWidget()
+        self.suggestions_container.setStyleSheet("background-color: transparent;")
+        self.suggestions_layout = QVBoxLayout(self.suggestions_container)
+        self.suggestions_layout.setSpacing(8)
+        self.suggestions_layout.setContentsMargins(8, 8, 8, 8)
+        self.suggestions_area.setWidget(self.suggestions_container)
+        self.suggestions_area.hide()
+        layout.addWidget(self.suggestions_area)
         
         layout.addSpacing(20)
         
@@ -847,7 +843,7 @@ class FullscreenKeyboardPage(QWidget):
         self.callback = callback
         self.input_field.setText(target_line_edit.text())
         self.shift_active = False
-        self.suggestions_list.hide()
+        self.suggestions_area.hide()
         self.title_label.setText(title)
         self.btn_dropdown.setVisible(show_suggestions)
         if show_suggestions:
@@ -864,25 +860,41 @@ class FullscreenKeyboardPage(QWidget):
     
     def toggle_suggestions(self):
         """Zeigt/versteckt die Vorschlagsliste."""
-        if self.suggestions_list.isVisible():
-            self.suggestions_list.hide()
+        if self.suggestions_area.isVisible():
+            self.suggestions_area.hide()
         else:
             self.update_suggestions()
-            self.suggestions_list.show()
-    
+            self.suggestions_area.show()
+
     def update_suggestions(self):
-        """Aktualisiert die Vorschlagsliste basierend auf der Eingabe."""
-        self.suggestions_list.clear()
+        """Aktualisiert die Vorschlagsliste (grosse Buttons) basierend auf der Eingabe."""
+        while self.suggestions_layout.count():
+            item = self.suggestions_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
         current_text = self.input_field.text().lower()
-        
+
         for name in self.all_suggestions:
             if name.lower().startswith(current_text) or current_text == "":
-                self.suggestions_list.addItem(name)
-    
-    def on_suggestion_selected(self, item):
+                btn = QPushButton(name)
+                btn.setMinimumHeight(60)
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #0f3460; color: white;
+                        border: none; border-radius: 10px;
+                        font-size: 24px; text-align: left; padding-left: 20px;
+                    }
+                    QPushButton:pressed { background-color: #00d9ff; color: #1a1a2e; }
+                """)
+                btn.clicked.connect(lambda checked, n=name: self.on_suggestion_selected(n))
+                self.suggestions_layout.addWidget(btn)
+
+    def on_suggestion_selected(self, name):
         """Übernimmt den ausgewählten Vorschlag."""
-        self.input_field.setText(item.text())
-        self.suggestions_list.hide()
+        self.input_field.setText(name)
+        self.suggestions_area.hide()
     
     def on_confirm(self):
         """Bestätigt Eingabe und kehrt zurück."""
