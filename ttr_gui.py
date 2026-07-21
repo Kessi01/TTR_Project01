@@ -2316,14 +2316,13 @@ class TurnierListPage(QWidget):
                 row_layout.addWidget(lbl_name, 1)
 
                 lbl_badge = QLabel(sets_label)
-                lbl_badge.setFixedWidth(90)
+                lbl_badge.setFixedSize(90, 40)
                 lbl_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 lbl_badge.setStyleSheet("""
                     background-color: #00d9ff; color: #1a1a2e;
                     border-radius: 10px; font-size: 16px; font-weight: bold;
-                    padding: 8px 0px;
                 """)
-                row_layout.addWidget(lbl_badge, 0)
+                row_layout.addWidget(lbl_badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
                 item = QListWidgetItem()
                 item.setText(name)
