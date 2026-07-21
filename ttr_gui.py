@@ -627,7 +627,7 @@ class FullscreenKeyboardPage(QWidget):
         
         # Dropdown-Button für Vorschläge
         self.btn_dropdown = QPushButton("▼")
-        self.btn_dropdown.setFixedSize(80, 80)
+        self.btn_dropdown.setFixedSize(80, 70)
         self.btn_dropdown.setStyleSheet("""
             QPushButton {
                 background-color: #00d9ff;
@@ -640,7 +640,7 @@ class FullscreenKeyboardPage(QWidget):
             QPushButton:pressed { background-color: #00b8d4; }
         """)
         self.btn_dropdown.clicked.connect(self.toggle_suggestions)
-        input_row.addWidget(self.btn_dropdown)
+        input_row.addWidget(self.btn_dropdown, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # Wrapper-Widget nur damit wir die Bildschirmposition der Eingabezeile
         # kennen, um das Vorschlags-Overlay direkt darunter zu platzieren.
