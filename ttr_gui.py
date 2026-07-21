@@ -675,11 +675,11 @@ class FullscreenKeyboardPage(QWidget):
         # gesamte Overlay-Hoehe zu strecken (Rand = Border+Margin der Liste).
         nav_col = QVBoxLayout()
         nav_col.setContentsMargins(0, 11, 0, 11)
-        nav_col.setSpacing(6)
+        nav_col.setSpacing(8)  # gleicher Abstand wie zwischen den Namensbalken (suggestions_layout)
         self.btn_suggestion_up = QPushButton("▲")
         self.btn_suggestion_down = QPushButton("▼")
         for btn in (self.btn_suggestion_up, self.btn_suggestion_down):
-            btn.setFixedSize(80, 60)  # gleiche Breite wie btn_dropdown (80px)
+            btn.setFixedSize(80, 60)  # gleiche Breite wie btn_dropdown (80px), gleiche Hoehe wie Namensbalken
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet("""
                 QPushButton {
@@ -690,8 +690,8 @@ class FullscreenKeyboardPage(QWidget):
                 QPushButton:pressed { background-color: #00b8d4; }
             """)
         nav_col.addWidget(self.btn_suggestion_up)
-        nav_col.addStretch(1)
         nav_col.addWidget(self.btn_suggestion_down)
+        nav_col.addStretch(1)
         self.btn_suggestion_up.clicked.connect(lambda: self._scroll_suggestions(-1))
         self.btn_suggestion_down.clicked.connect(lambda: self._scroll_suggestions(1))
         overlay_layout.addLayout(nav_col)
@@ -946,7 +946,7 @@ class FullscreenKeyboardPage(QWidget):
         for name in self.all_suggestions:
             if name.lower().startswith(current_text) or current_text == "":
                 btn = QPushButton(name)
-                btn.setMinimumHeight(60)
+                btn.setFixedHeight(60)
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn.setStyleSheet("""
                     QPushButton {
