@@ -937,18 +937,25 @@ class FullscreenKeyboardPage(QWidget):
     def _align_suggestion_nav_buttons(self):
         """Positioniert die Auf/Ab-Buttons exakt auf Hoehe der Vorschlagsliste.
 
-        Statt sich auf angenommene Zeilenhoehen zu verlassen, wird die
-        tatsaechlich gerenderte Geometrie von suggestions_area genutzt (border
-        3px + Container-Margin 8px aus den Stylesheets oben), damit die
-        Buttons nie unabhaengig von der Liste verrutschen koennen.
+        Statt mit angenommenen Konstanten (Border/Margin/Zeilenhoehe) zu
+        rechnen, wird die tatsaechlich gerenderte Position der ersten und
+        letzten sichtbaren Vorschlagszeile per mapTo() abgefragt. So landet
+        "oben" immer exakt auf der ersten Zeile und "unten" exakt auf der
+        letzten Zeile inkl. des dortigen Zeilenabstands - unabhaengig davon,
+        wie hoch eine Zeile durch Schrift/Padding tatsaechlich ausfaellt.
         """
-        area = self.suggestions_area.geometry()
-        border_and_margin = 3 + 8
         nav_x = self.suggestions_overlay.width() - self.NAV_BTN_WIDTH
-        top_y = area.top() + border_and_margin
-        bottom_y = area.bottom() - border_and_margin
+        count = self.suggestions_layout.count()
+        if count == 0:
+            return
+        first_widget = self.suggestions_layout.itemAt(0).widget()
+        last_widget = self.suggestions_layout.itemAt(min(count, 3) - 1).widget()
+        if not first_widget or not last_widget:
+            return
+        top_y = first_widget.mapTo(self.suggestions_overlay, QPoint(0, 0)).y()
+        bottom_y = last_widget.mapTo(self.suggestions_overlay, QPoint(0, 0)).y() + last_widget.height()
         self.btn_suggestion_up.move(nav_x, top_y)
-        self.btn_suggestion_down.move(nav_x, bottom_y - self.btn_suggestion_down.height() + 1)
+        self.btn_suggestion_down.move(nav_x, bottom_y - self.btn_suggestion_down.height())
         self.btn_suggestion_up.raise_()
         self.btn_suggestion_down.raise_()
 
