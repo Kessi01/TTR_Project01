@@ -2828,6 +2828,7 @@ class TurnierMatchSetupPage(QWidget):
         self.player1_name = None
         self.player2_name = None
         self._player_buttons = {}
+        self._session_new_players = []  # (id, name), fuer diese Seite neu angelegt aber noch ohne Match in diesem Turnier
         self.setup_ui()
 
     def setup_ui(self):
@@ -2958,6 +2959,7 @@ class TurnierMatchSetupPage(QWidget):
         self.player1_name = None
         self.player2_name = None
         self._player_buttons = {}
+        self._session_new_players = []
 
         # Fetch sets_to_win from DB
         self.sets_to_win = 3
@@ -2982,8 +2984,15 @@ class TurnierMatchSetupPage(QWidget):
         if not self.main_window or not self.main_window.db:
             return
 
-        raw_players = self.main_window.db.get_spieler()
-        players = [(pid, f"{vorname} {nachname}".strip()) for pid, vorname, nachname in raw_players]
+        # Nur Spieler, die bereits in DIESEM Turnier gespielt haben ...
+        players = list(self.main_window.db.get_turnier_spieler(self.turnier_id))
+        # ... plus Spieler, die gerade eben ueber "+ Neuer Spieler" hinzugefuegt wurden
+        # (die haben noch kein Match in diesem Turnier und wuerden sonst nicht auftauchen)
+        existing_ids = {pid for pid, _ in players}
+        for pid, name in self._session_new_players:
+            if pid not in existing_ids:
+                players.append((pid, name))
+
         cols = 3
         for i, (pid, name) in enumerate(players):
             btn = QPushButton(name)
@@ -3043,6 +3052,7 @@ class TurnierMatchSetupPage(QWidget):
         if spieler_id is None:
             show_custom_info_dialog(self, "Fehler", f"Spieler '{name}' konnte nicht angelegt werden!")
             return
+        self._session_new_players.append((spieler_id, name))
         self._load_players()
 
     def _on_back(self):
