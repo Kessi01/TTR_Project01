@@ -896,6 +896,7 @@ class FullscreenKeyboardPage(QWidget):
         if self.suggestions_overlay.isVisible():
             self.suggestions_overlay.hide()
         else:
+            self.load_suggestions()  # frische Spielerliste, falls sich die DB seit dem Oeffnen der Tastatur geaendert hat
             self.update_suggestions()
             self._position_suggestions_overlay()
             self.suggestions_overlay.show()
