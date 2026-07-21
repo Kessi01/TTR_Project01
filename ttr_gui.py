@@ -2523,10 +2523,15 @@ class TurnierDetailPage(QWidget):
         self.rank_table.horizontalHeader().setVisible(True)
         self.rank_table.verticalHeader().setVisible(False)
         self.rank_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        for col in (0, 2, 3, 4, 5):
+        for col in (2, 3, 4, 5):
             self.rank_table.horizontalHeader().setSectionResizeMode(
                 col, QHeaderView.ResizeMode.ResizeToContents
             )
+        # Rang-Spalte fest schmal halten (ResizeToContents machte sie wegen des
+        # gepolsterten Grossbuchstaben-Headers "RANG" unnoetig breit -> grosse
+        # Luecke zum Spielernamen).
+        self.rank_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        self.rank_table.setColumnWidth(0, 55)
         self.rank_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.rank_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.rank_table.setShowGrid(False)
