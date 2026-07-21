@@ -670,12 +670,16 @@ class FullscreenKeyboardPage(QWidget):
         overlay_layout.addWidget(self.suggestions_area, 1)
 
         # Auf/Ab-Buttons statt Scrollbalken: ein Tap = ein Name weiter.
+        # Feste Hoehe = Zeilenhoehe der Vorschlags-Buttons, damit sie exakt auf
+        # oberster/unterster sichtbarer Zeile sitzen statt sich ueber die
+        # gesamte Overlay-Hoehe zu strecken (Rand = Border+Margin der Liste).
         nav_col = QVBoxLayout()
+        nav_col.setContentsMargins(0, 11, 0, 11)
         nav_col.setSpacing(6)
         self.btn_suggestion_up = QPushButton("▲")
         self.btn_suggestion_down = QPushButton("▼")
         for btn in (self.btn_suggestion_up, self.btn_suggestion_down):
-            btn.setFixedWidth(60)
+            btn.setFixedSize(60, 60)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet("""
                 QPushButton {
@@ -685,7 +689,9 @@ class FullscreenKeyboardPage(QWidget):
                 }
                 QPushButton:pressed { background-color: #00d9ff; color: #1a1a2e; }
             """)
-            nav_col.addWidget(btn, 1)
+        nav_col.addWidget(self.btn_suggestion_up)
+        nav_col.addStretch(1)
+        nav_col.addWidget(self.btn_suggestion_down)
         self.btn_suggestion_up.clicked.connect(lambda: self._scroll_suggestions(-1))
         self.btn_suggestion_down.clicked.connect(lambda: self._scroll_suggestions(1))
         overlay_layout.addLayout(nav_col)
