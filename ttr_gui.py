@@ -649,15 +649,17 @@ class FullscreenKeyboardPage(QWidget):
         layout.addWidget(self.input_row_widget)
 
         # Vorschlagsliste als schwebendes Overlay ueber der Tastatur (zunächst versteckt)
-        self.suggestions_area = QScrollArea(self)
+        self.suggestions_overlay = QWidget(self)
+        overlay_layout = QHBoxLayout(self.suggestions_overlay)
+        overlay_layout.setContentsMargins(0, 0, 0, 0)
+        overlay_layout.setSpacing(6)
+
+        self.suggestions_area = QScrollArea()
         self.suggestions_area.setWidgetResizable(True)
+        self.suggestions_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.suggestions_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.suggestions_area.setStyleSheet("""
             QScrollArea { background-color: #16213e; border: 3px solid #00d9ff; border-radius: 15px; }
-            QScrollBar:vertical { background: #16213e; width: 40px; border-radius: 12px; margin: 0px; }
-            QScrollBar::handle:vertical { background: #0f3460; border-radius: 12px; min-height: 30px; }
-            QScrollBar::handle:vertical:pressed { background: #00d9ff; }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
         """)
         self.suggestions_container = QWidget()
         self.suggestions_container.setStyleSheet("background-color: transparent;")
@@ -665,7 +667,30 @@ class FullscreenKeyboardPage(QWidget):
         self.suggestions_layout.setSpacing(8)
         self.suggestions_layout.setContentsMargins(8, 8, 8, 8)
         self.suggestions_area.setWidget(self.suggestions_container)
-        self.suggestions_area.hide()
+        overlay_layout.addWidget(self.suggestions_area, 1)
+
+        # Auf/Ab-Buttons statt Scrollbalken: ein Tap = ein Name weiter.
+        nav_col = QVBoxLayout()
+        nav_col.setSpacing(6)
+        self.btn_suggestion_up = QPushButton("▲")
+        self.btn_suggestion_down = QPushButton("▼")
+        for btn in (self.btn_suggestion_up, self.btn_suggestion_down):
+            btn.setFixedWidth(60)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #0f3460; color: #00d9ff;
+                    border: none; border-radius: 10px;
+                    font-size: 20px; font-weight: bold;
+                }
+                QPushButton:pressed { background-color: #00d9ff; color: #1a1a2e; }
+            """)
+            nav_col.addWidget(btn, 1)
+        self.btn_suggestion_up.clicked.connect(lambda: self._scroll_suggestions(-1))
+        self.btn_suggestion_down.clicked.connect(lambda: self._scroll_suggestions(1))
+        overlay_layout.addLayout(nav_col)
+
+        self.suggestions_overlay.hide()
 
         layout.addSpacing(20)
         
@@ -845,7 +870,7 @@ class FullscreenKeyboardPage(QWidget):
         self.callback = callback
         self.input_field.setText(target_line_edit.text())
         self.shift_active = False
-        self.suggestions_area.hide()
+        self.suggestions_overlay.hide()
         self.title_label.setText(title)
         self.btn_dropdown.setVisible(show_suggestions)
         if show_suggestions:
@@ -862,13 +887,19 @@ class FullscreenKeyboardPage(QWidget):
     
     def toggle_suggestions(self):
         """Zeigt/versteckt das Vorschlags-Overlay."""
-        if self.suggestions_area.isVisible():
-            self.suggestions_area.hide()
+        if self.suggestions_overlay.isVisible():
+            self.suggestions_overlay.hide()
         else:
             self.update_suggestions()
             self._position_suggestions_overlay()
-            self.suggestions_area.show()
-            self.suggestions_area.raise_()
+            self.suggestions_overlay.show()
+            self.suggestions_overlay.raise_()
+
+    def _scroll_suggestions(self, direction):
+        """Scrollt die Vorschlagsliste um einen Namen (Button-Hoehe + Spacing) weiter/zurueck."""
+        step = 60 + 8  # Button-Hoehe + Spacing aus update_suggestions()
+        bar = self.suggestions_area.verticalScrollBar()
+        bar.setValue(bar.value() + direction * step)
 
     def _position_suggestions_overlay(self):
         """Platziert das Overlay direkt unter der Eingabezeile, über der Tastatur.
@@ -881,11 +912,11 @@ class FullscreenKeyboardPage(QWidget):
         y = self.input_row_widget.y() + self.input_row_widget.height() + 10
         width = self.input_row_widget.width()
         overlay_height = 3 * 60 + 2 * 8 + 2 * 8 + 10  # 3 Buttons + Spacing + Margins + Puffer
-        self.suggestions_area.setGeometry(x, y, width, overlay_height)
+        self.suggestions_overlay.setGeometry(x, y, width, overlay_height)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if self.suggestions_area.isVisible():
+        if self.suggestions_overlay.isVisible():
             self._position_suggestions_overlay()
 
     def update_suggestions(self):
@@ -916,7 +947,7 @@ class FullscreenKeyboardPage(QWidget):
     def on_suggestion_selected(self, name):
         """Übernimmt den ausgewählten Vorschlag."""
         self.input_field.setText(name)
-        self.suggestions_area.hide()
+        self.suggestions_overlay.hide()
     
     def on_confirm(self):
         """Bestätigt Eingabe und kehrt zurück."""
