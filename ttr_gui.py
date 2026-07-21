@@ -641,15 +641,18 @@ class FullscreenKeyboardPage(QWidget):
         """)
         self.btn_dropdown.clicked.connect(self.toggle_suggestions)
         input_row.addWidget(self.btn_dropdown)
-        
-        layout.addLayout(input_row)
-        
-        # Vorschlagsliste als grosse, antippbare Buttons (zunächst versteckt)
-        self.suggestions_area = QScrollArea()
+
+        # Wrapper-Widget nur damit wir die Bildschirmposition der Eingabezeile
+        # kennen, um das Vorschlags-Overlay direkt darunter zu platzieren.
+        self.input_row_widget = QWidget()
+        self.input_row_widget.setLayout(input_row)
+        layout.addWidget(self.input_row_widget)
+
+        # Vorschlagsliste als schwebendes Overlay ueber der Tastatur (zunächst versteckt)
+        self.suggestions_area = QScrollArea(self)
         self.suggestions_area.setWidgetResizable(True)
-        self.suggestions_area.setMaximumHeight(260)
         self.suggestions_area.setStyleSheet("""
-            QScrollArea { background-color: #16213e; border: 2px solid #00d9ff; border-radius: 10px; }
+            QScrollArea { background-color: #16213e; border: 3px solid #00d9ff; border-radius: 15px; }
             QScrollBar:vertical { background: #16213e; width: 40px; border-radius: 12px; margin: 0px; }
             QScrollBar::handle:vertical { background: #0f3460; border-radius: 12px; min-height: 30px; }
             QScrollBar::handle:vertical:pressed { background: #00d9ff; }
@@ -663,8 +666,7 @@ class FullscreenKeyboardPage(QWidget):
         self.suggestions_layout.setContentsMargins(8, 8, 8, 8)
         self.suggestions_area.setWidget(self.suggestions_container)
         self.suggestions_area.hide()
-        layout.addWidget(self.suggestions_area)
-        
+
         layout.addSpacing(20)
         
         # ===== Tastatur =====
@@ -859,12 +861,32 @@ class FullscreenKeyboardPage(QWidget):
             self.all_suggestions = [f"{s[1]} {s[2]}" for s in spieler]
     
     def toggle_suggestions(self):
-        """Zeigt/versteckt die Vorschlagsliste."""
+        """Zeigt/versteckt das Vorschlags-Overlay."""
         if self.suggestions_area.isVisible():
             self.suggestions_area.hide()
         else:
             self.update_suggestions()
+            self._position_suggestions_overlay()
             self.suggestions_area.show()
+            self.suggestions_area.raise_()
+
+    def _position_suggestions_overlay(self):
+        """Platziert das Overlay direkt unter der Eingabezeile, über der Tastatur.
+
+        Hoehe reicht exakt fuer 3 Buttons (60px) + Abstaende, damit alle
+        Vorschlaege ohne Scrollen sichtbar sind; QScrollArea scrollt trotzdem,
+        falls doch mal mehr Platz benoetigt wird.
+        """
+        x = self.input_row_widget.x()
+        y = self.input_row_widget.y() + self.input_row_widget.height() + 10
+        width = self.input_row_widget.width()
+        overlay_height = 3 * 60 + 2 * 8 + 2 * 8 + 10  # 3 Buttons + Spacing + Margins + Puffer
+        self.suggestions_area.setGeometry(x, y, width, overlay_height)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.suggestions_area.isVisible():
+            self._position_suggestions_overlay()
 
     def update_suggestions(self):
         """Aktualisiert die Vorschlagsliste (grosse Buttons) basierend auf der Eingabe."""
