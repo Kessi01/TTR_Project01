@@ -2306,13 +2306,13 @@ class TurnierListPage(QWidget):
                 sets_label = f"Bo{sets_to_win * 2 - 1}"
 
                 row_widget = QWidget()
-                row_widget.setStyleSheet("background: transparent;")
+                row_widget.setStyleSheet("background-color: #16213e;")
                 row_layout = QHBoxLayout(row_widget)
                 row_layout.setContentsMargins(10, 10, 10, 10)
                 row_layout.setSpacing(15)
 
                 lbl_name = QLabel(name)
-                lbl_name.setStyleSheet("font-size: 20px; color: #ffffff; background: transparent;")
+                lbl_name.setStyleSheet("font-size: 20px; color: #ffffff; background-color: #16213e;")
                 row_layout.addWidget(lbl_name, 1)
 
                 lbl_badge = QLabel(sets_label)
