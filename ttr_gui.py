@@ -2328,7 +2328,9 @@ class TurnierListPage(QWidget):
                 item = QListWidgetItem()
                 item.setText(name)
                 item.setData(Qt.ItemDataRole.UserRole, turnier_id)
-                item.setSizeHint(row_widget.sizeHint())
+                # sizeHint() des Zeilen-Widgets ist vor dem ersten Layout-Durchlauf
+                # unzuverlaessig (zu klein) -> feste, grosszuegige Zeilenhoehe erzwingen.
+                item.setSizeHint(QSize(row_widget.sizeHint().width(), 70))
                 self.turnier_list.addItem(item)
                 self.turnier_list.setItemWidget(item, row_widget)
     
