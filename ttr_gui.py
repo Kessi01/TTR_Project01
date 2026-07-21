@@ -896,8 +896,17 @@ class FullscreenKeyboardPage(QWidget):
             self.suggestions_overlay.raise_()
 
     def _scroll_suggestions(self, direction):
-        """Scrollt die Vorschlagsliste um einen Namen (Button-Hoehe + Spacing) weiter/zurueck."""
-        step = 60 + 8  # Button-Hoehe + Spacing aus update_suggestions()
+        """Scrollt die Vorschlagsliste um genau einen Namen weiter/zurueck.
+
+        Die Schrittweite wird aus der tatsaechlich gerenderten Button-Hoehe
+        berechnet (nicht aus der nominalen minimumHeight), da die reale Hoehe
+        durch Schrift/Padding groesser ausfallen kann als angenommen.
+        """
+        step = 68  # Fallback, falls noch kein Button gerendert wurde
+        if self.suggestions_layout.count() > 0:
+            first_widget = self.suggestions_layout.itemAt(0).widget()
+            if first_widget:
+                step = first_widget.height() + self.suggestions_layout.spacing()
         bar = self.suggestions_area.verticalScrollBar()
         bar.setValue(bar.value() + direction * step)
 
