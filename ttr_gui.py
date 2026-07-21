@@ -920,19 +920,24 @@ class FullscreenKeyboardPage(QWidget):
         """Platziert das Overlay direkt unter der Eingabezeile, über der Tastatur.
 
         Es sind immer nur 2 Zeilen gleichzeitig sichtbar (mehr Treffer werden
-        per Auf/Ab-Button einzeln durchgescrollt). Hoehe wird bewusst mit
-        etwas Puffer berechnet, damit die untere Zeile nie am Rand der
-        QScrollArea abgeschnitten wird, und mindestens so gross wie die
-        Auf/Ab-Buttons selbst brauchen (150px), damit die nie ueberlaufen.
+        per Auf/Ab-Button einzeln durchgescrollt). Bei nur einem Treffer gibt
+        es nichts zu scrollen - die Buttons werden dann ausgeblendet und das
+        Overlay schrumpft auf die eine Zeile, statt Leerraum zu zeigen.
         """
         x = self.input_row_widget.x()
         y = self.input_row_widget.y() + self.input_row_widget.height() + 10
         width = self.input_row_widget.width()
-        rows = min(max(self.suggestions_layout.count(), 1), 2)
+        count = self.suggestions_layout.count()
+        rows = min(max(count, 1), 2)
+
+        show_nav = count > 1
+        self.btn_suggestion_up.setVisible(show_nav)
+        self.btn_suggestion_down.setVisible(show_nav)
+
         border = 2 * 3      # QScrollArea-Rahmen oben+unten
         margins = 2 * 8     # Container-Margin oben+unten
         content = rows * 60 + (rows - 1) * 8
-        overlay_height = max(150, border + margins + content + 8)  # + Sicherheitspuffer
+        overlay_height = border + margins + content + 8  # + Sicherheitspuffer
         self.suggestions_overlay.setGeometry(x, y, width, overlay_height)
 
     def resizeEvent(self, event):
