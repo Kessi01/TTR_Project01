@@ -262,4 +262,3 @@ Herzlich willkommen beim TTR Scoreboard. Diese Anleitung erklärt Ihnen Schritt 
 •	4.5 Tipps für die Bedienung
 •	Touch-Bedienung: Falls Ihr Monitor ein Touchscreen ist, können Sie alle Buttons bequem mit den Fingern bedienen. Die Tasten sind extra gross gestaltet, um Fehlklicks zu vermeiden.
 •	Programm schliessen: Da das Programm im Vollbildmodus läuft, gibt es kein typisches «X»-Symbol. Nutzen Sie die Taste Escape (ESC) oder die vom Administrator definierte Beenden-Taste, um das Programm zu verlassen.
-

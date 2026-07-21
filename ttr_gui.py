@@ -2304,10 +2304,33 @@ class TurnierListPage(QWidget):
             for turnier in turniere:
                 turnier_id, name, erstellt_am, sets_to_win = turnier
                 sets_label = f"Bo{sets_to_win * 2 - 1}"
-                datum_str = str(erstellt_am)[:10] if erstellt_am else ""
-                item = QListWidgetItem(f"{name}  |  {sets_label}  |  {datum_str}")
+
+                row_widget = QWidget()
+                row_widget.setStyleSheet("background: transparent;")
+                row_layout = QHBoxLayout(row_widget)
+                row_layout.setContentsMargins(10, 10, 10, 10)
+                row_layout.setSpacing(15)
+
+                lbl_name = QLabel(name)
+                lbl_name.setStyleSheet("font-size: 20px; color: #ffffff; background: transparent;")
+                row_layout.addWidget(lbl_name, 1)
+
+                lbl_badge = QLabel(sets_label)
+                lbl_badge.setFixedWidth(90)
+                lbl_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                lbl_badge.setStyleSheet("""
+                    background-color: #00d9ff; color: #1a1a2e;
+                    border-radius: 10px; font-size: 16px; font-weight: bold;
+                    padding: 8px 0px;
+                """)
+                row_layout.addWidget(lbl_badge, 0)
+
+                item = QListWidgetItem()
+                item.setText(name)
                 item.setData(Qt.ItemDataRole.UserRole, turnier_id)
+                item.setSizeHint(row_widget.sizeHint())
                 self.turnier_list.addItem(item)
+                self.turnier_list.setItemWidget(item, row_widget)
     
     def on_back(self):
         if self.main_window:
