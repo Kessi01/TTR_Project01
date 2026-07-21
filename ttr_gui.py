@@ -33,13 +33,9 @@ except ImportError:
 
 
 # ==================== DATENBANK-KONFIGURATION ====================
-DB_CONFIG = {
-    'host': 'localhost',
-    'database': 'ttr_db',
-    'user': 'root',
-    'password': 'Pat@3400Roy',  # Ihr Passwort
-    'auth_plugin': 'mysql_native_password'
-}
+# Wird aus .env geladen (siehe src/config.py) statt hardcoded im Code zu stehen.
+from src.config import get_db_config
+DB_CONFIG = get_db_config().to_dict()
 
 
 # ==================== STYLESHEET (Globales Dark Theme) ====================
