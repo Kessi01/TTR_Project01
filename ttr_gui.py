@@ -679,15 +679,15 @@ class FullscreenKeyboardPage(QWidget):
         self.btn_suggestion_up = QPushButton("▲")
         self.btn_suggestion_down = QPushButton("▼")
         for btn in (self.btn_suggestion_up, self.btn_suggestion_down):
-            btn.setFixedSize(60, 60)
+            btn.setFixedSize(80, 60)  # gleiche Breite wie btn_dropdown (80px)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #0f3460; color: #00d9ff;
+                    background-color: #00d9ff; color: #1a1a2e;
                     border: none; border-radius: 10px;
                     font-size: 20px; font-weight: bold;
                 }
-                QPushButton:pressed { background-color: #00d9ff; color: #1a1a2e; }
+                QPushButton:pressed { background-color: #00b8d4; }
             """)
         nav_col.addWidget(self.btn_suggestion_up)
         nav_col.addStretch(1)
