@@ -611,7 +611,7 @@ class FullscreenKeyboardPage(QWidget):
         input_row = QHBoxLayout()
         
         self.input_field = QLineEdit()
-        self.input_field.setMinimumHeight(80)
+        self.input_field.setFixedHeight(80)
         self.input_field.setStyleSheet("""
             QLineEdit {
                 background-color: #16213e;
