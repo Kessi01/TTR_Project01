@@ -2271,7 +2271,7 @@ class TurnierListPage(QWidget):
         self.turnier_list = QListWidget()
         self.turnier_list.setStyleSheet("""
             QListWidget { background-color: #16213e; border: 2px solid #0f3460; border-radius: 10px; padding: 10px; font-size: 20px; }
-            QListWidget::item { padding: 15px; border-bottom: 1px solid #0f3460; color: #ffffff; }
+            QListWidget::item { padding: 0px; border-bottom: 1px solid #0f3460; color: #ffffff; }
             QListWidget::item:selected { background-color: #00d9ff; color: #1a1a2e; }
             QScrollBar:vertical { background: #16213e; width: 52px; border-radius: 16px; margin: 0px; }
             QScrollBar::handle:vertical { background: #0f3460; border-radius: 16px; min-height: 30px; }
