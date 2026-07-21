@@ -2519,7 +2519,7 @@ class TurnierDetailPage(QWidget):
 
         self.rank_table = QTableWidget()
         self.rank_table.setColumnCount(6)
-        self.rank_table.setHorizontalHeaderLabels(["#", "Spieler", "S", "N", "Sätze", "±"])
+        self.rank_table.setHorizontalHeaderLabels(["Rang", "Spieler", "S", "N", "Sätze", "±"])
         self.rank_table.horizontalHeader().setVisible(True)
         self.rank_table.verticalHeader().setVisible(False)
         self.rank_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -2564,7 +2564,6 @@ class TurnierDetailPage(QWidget):
     _C_DATE    = "#3a4460"
     _C_ROW_ODD = "#12192b"
     _C_ROW_EVN = "#0e1525"
-    _MEDALS    = {0: "🥇", 1: "🥈", 2: "🥉"}
     _FONT_MATCH = 18   # px — match rows
     _FONT_RANK  = 17   # px — ranking rows
 
@@ -2679,8 +2678,7 @@ class TurnierDetailPage(QWidget):
             row_bg = self._C_ROW_ODD if row % 2 == 0 else self._C_ROW_EVN
             fs = self._FONT_RANK
 
-            medal = self._MEDALS.get(row, "")
-            rank_text = f"{medal} {row + 1}" if medal else f"  {row + 1}"
+            rank_text = str(row + 1)
             self.rank_table.setItem(row, 0, self._make_item(rank_text, CENTER, fg="#888888", bg=row_bg, font_size=fs))
 
             name_fg = "#ffffff" if row == 0 else "#cccccc"
