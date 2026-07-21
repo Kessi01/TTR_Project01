@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem, QHeaderView, QAbstractItemView,
     QComboBox, QRadioButton, QButtonGroup, QCompleter, QDialog, QScrollArea
 )
-from PyQt6.QtCore import Qt, QSize, QTimer, QPoint
+from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QKeyEvent
 import os
 
@@ -654,13 +654,6 @@ class FullscreenKeyboardPage(QWidget):
         overlay_layout.setContentsMargins(0, 0, 0, 0)
         overlay_layout.setSpacing(6)
 
-        # Platz rechts fuer die Auf/Ab-Buttons reservieren (80px + 6px Abstand);
-        # die Buttons selbst werden NICHT ins Layout gehaengt, sondern als frei
-        # positionierte Kinder des Overlays exakt auf die oberste/unterste
-        # sichtbare Zeile ausgerichtet (siehe _align_suggestion_nav_buttons).
-        self.NAV_BTN_WIDTH = 80
-        overlay_layout.setContentsMargins(0, 0, self.NAV_BTN_WIDTH + 6, 0)
-
         self.suggestions_area = QScrollArea()
         self.suggestions_area.setWidgetResizable(True)
         self.suggestions_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -677,13 +670,16 @@ class FullscreenKeyboardPage(QWidget):
         overlay_layout.addWidget(self.suggestions_area, 1)
 
         # Auf/Ab-Buttons statt Scrollbalken: ein Tap = ein Name weiter.
-        # Frei positioniert (siehe oben) statt per Layout-Stretch, damit sie
-        # sich exakt an der tatsaechlich gerenderten obersten/untersten Zeile
-        # ausrichten, egal wie viele Vorschlaege angezeigt werden.
-        self.btn_suggestion_up = QPushButton("▲", self.suggestions_overlay)
-        self.btn_suggestion_down = QPushButton("▼", self.suggestions_overlay)
+        # Feste Hoehe = Zeilenhoehe der Vorschlags-Buttons, damit sie exakt auf
+        # oberster/unterster sichtbarer Zeile sitzen statt sich ueber die
+        # gesamte Overlay-Hoehe zu strecken (Rand = Border+Margin der Liste).
+        nav_col = QVBoxLayout()
+        nav_col.setContentsMargins(0, 11, 0, 11)
+        nav_col.setSpacing(6)
+        self.btn_suggestion_up = QPushButton("▲")
+        self.btn_suggestion_down = QPushButton("▼")
         for btn in (self.btn_suggestion_up, self.btn_suggestion_down):
-            btn.setFixedSize(self.NAV_BTN_WIDTH, 60)
+            btn.setFixedSize(80, 60)  # gleiche Breite wie btn_dropdown (80px)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet("""
                 QPushButton {
@@ -693,8 +689,12 @@ class FullscreenKeyboardPage(QWidget):
                 }
                 QPushButton:pressed { background-color: #00b8d4; }
             """)
+        nav_col.addWidget(self.btn_suggestion_up)
+        nav_col.addStretch(1)
+        nav_col.addWidget(self.btn_suggestion_down)
         self.btn_suggestion_up.clicked.connect(lambda: self._scroll_suggestions(-1))
         self.btn_suggestion_down.clicked.connect(lambda: self._scroll_suggestions(1))
+        overlay_layout.addLayout(nav_col)
 
         self.suggestions_overlay.hide()
 
@@ -900,9 +900,6 @@ class FullscreenKeyboardPage(QWidget):
             self._position_suggestions_overlay()
             self.suggestions_overlay.show()
             self.suggestions_overlay.raise_()
-            # Erst nach dem Layout-Durchlauf hat suggestions_area seine
-            # endgueltige Geometrie -> Ausrichtung im naechsten Event-Loop-Tick.
-            QTimer.singleShot(0, self._align_suggestion_nav_buttons)
 
     def _scroll_suggestions(self, direction):
         """Scrollt die Vorschlagsliste um genau einen Namen weiter/zurueck.
@@ -934,29 +931,10 @@ class FullscreenKeyboardPage(QWidget):
         overlay_height = rows * 60 + (rows - 1) * 8 + 2 * 8 + 10  # Buttons + Spacing + Margins + Puffer
         self.suggestions_overlay.setGeometry(x, y, width, overlay_height)
 
-    def _align_suggestion_nav_buttons(self):
-        """Positioniert die Auf/Ab-Buttons exakt auf Hoehe der Vorschlagsliste.
-
-        Statt sich auf angenommene Zeilenhoehen zu verlassen, wird die
-        tatsaechlich gerenderte Geometrie von suggestions_area genutzt (border
-        3px + Container-Margin 8px aus den Stylesheets oben), damit die
-        Buttons nie unabhaengig von der Liste verrutschen koennen.
-        """
-        area = self.suggestions_area.geometry()
-        border_and_margin = 3 + 8
-        nav_x = self.suggestions_overlay.width() - self.NAV_BTN_WIDTH
-        top_y = area.top() + border_and_margin
-        bottom_y = area.bottom() - border_and_margin
-        self.btn_suggestion_up.move(nav_x, top_y)
-        self.btn_suggestion_down.move(nav_x, bottom_y - self.btn_suggestion_down.height() + 1)
-        self.btn_suggestion_up.raise_()
-        self.btn_suggestion_down.raise_()
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self.suggestions_overlay.isVisible():
             self._position_suggestions_overlay()
-            QTimer.singleShot(0, self._align_suggestion_nav_buttons)
 
     def update_suggestions(self):
         """Aktualisiert die Vorschlagsliste (grosse Buttons) basierend auf der Eingabe."""
