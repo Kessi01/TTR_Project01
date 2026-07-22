@@ -941,22 +941,26 @@ class FullscreenKeyboardPage(QWidget):
         auszugehen). Die Box nutzt so immer den kompletten tatsaechlich
         verfuegbaren Platz zwischen Eingabezeile und Tastatur - unabhaengig
         von der echten Bildschirmaufloesung, die wir nicht zuverlaessig
-        erraten koennen. Namens-Balken und Nav-Buttons behalten dabei ihr
-        Groessenverhaeltnis (Nav-Buttons 12% groesser als die Balken)."""
+        erraten koennen. Die Nav-Buttons (▲/▼) sind exakt gleich gross wie
+        der Dropdown-Toggle-Button neben der Eingabezeile (auf Wunsch);
+        reicht die uebergebene Hoehe dafuer nicht aus, wird die Box
+        entsprechend vergroessert statt die Buttons zu quetschen."""
         gap = self._px(8)
         margin = self._px(8)
         border = self._px(3)
 
-        content_h = max(2, box_height - margin * 2 - border * 2)
-        # content_h = nav_h*2 + gap, mit nav_h = row_h * NAV_BUTTON_SCALE
-        nav_h = max(1, (content_h - gap) // 2)
+        nav_h = self._px(70)  # exakt wie btn_dropdown - siehe _apply_responsive_metrics
         row_h = max(1, round(nav_h / self.NAV_BUTTON_SCALE))
 
         rows_stack_h = row_h * 2 + gap
         nav_stack_h = nav_h * 2 + gap
+        min_content_h = max(rows_stack_h, nav_stack_h)
+        content_h = max(min_content_h, box_height - margin * 2 - border * 2)
+        box_height = margin * 2 + content_h + border * 2
+
         row_v_margin = margin + max(0, (content_h - rows_stack_h) // 2)
         nav_v_margin = margin + max(0, (content_h - nav_stack_h) // 2)
-        return row_h, nav_h, gap, margin, row_v_margin, nav_v_margin, border
+        return row_h, nav_h, gap, margin, row_v_margin, nav_v_margin, border, box_height
 
     def _apply_responsive_metrics(self):
         """Skaliert Eingabezeile und Dropdown-Toggle proportional zur
@@ -967,9 +971,9 @@ class FullscreenKeyboardPage(QWidget):
         self.btn_dropdown.setFixedSize(self._px_w(80), self._px(70))  # unveraendert
 
     def _apply_suggestion_metrics(self, box_height):
-        """Skaliert die Vorschlags-Buttons so, dass sie exakt die uebergebene
-        Gesamthoehe ausfuellen (siehe _position_suggestions_overlay)."""
-        row_h, nav_h, gap, margin, row_v_margin, nav_v_margin, border = (
+        """Skaliert die Vorschlags-Buttons und gibt die dafuer tatsaechlich
+        benoetigte Gesamthoehe zurueck (siehe _position_suggestions_overlay)."""
+        row_h, nav_h, gap, margin, row_v_margin, nav_v_margin, border, box_height = (
             self._suggestion_box_metrics(box_height)
         )
 
@@ -1008,6 +1012,7 @@ class FullscreenKeyboardPage(QWidget):
         self.suggestions_overlay_layout.setSpacing(self._px(6))
 
         self._suggestion_box_height = box_height
+        return box_height
 
     def _scroll_suggestions(self, direction):
         """Blaettert die feste 2-Zeilen-Anzeige um einen Namen weiter/zurueck."""
@@ -1038,7 +1043,10 @@ class FullscreenKeyboardPage(QWidget):
         # toggle_suggestions() bringt sie nach vorne).
         overlay_height = min(self._px(self.SUGGESTION_BOX_BASE_HEIGHT), max(self._px(100), self.height() - y - gap))
 
-        self._apply_suggestion_metrics(overlay_height)
+        # _apply_suggestion_metrics() kann die Hoehe noch nach oben korrigieren,
+        # falls die exakt-gleich-grossen Nav-Buttons mehr Platz brauchen als
+        # oben vorgesehen.
+        overlay_height = self._apply_suggestion_metrics(overlay_height)
         self.suggestions_overlay.setGeometry(x, y, width, overlay_height)
 
     def resizeEvent(self, event):
