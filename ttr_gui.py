@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QStackedWidget, QLineEdit, QFrame,
     QSizePolicy, QSpacerItem, QListWidget, QListWidgetItem, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QComboBox, QRadioButton, QButtonGroup, QCompleter, QDialog, QScrollArea
+    QComboBox, QRadioButton, QButtonGroup, QCompleter, QDialog
 )
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QKeyEvent
@@ -651,38 +651,43 @@ class FullscreenKeyboardPage(QWidget):
         self.input_row_widget.setLayout(input_row)
         layout.addWidget(self.input_row_widget)
 
-        # Vorschlagsliste als schwebendes Overlay ueber der Tastatur (zunächst versteckt)
+        # Vorschlagsliste als schwebendes Overlay ueber der Tastatur (zunächst versteckt).
+        # Bewusst KEINE QScrollArea: deren Viewport-Groesse haengt vom Qt-Style
+        # der Plattform ab (Windows und Pi/Linux reservieren die per Stylesheet
+        # gesetzte Border unterschiedlich in der Viewport-Berechnung), wodurch
+        # am Pi trotz identischer Zahlen immer wieder eine dritte, unvollstaendige
+        # Zeile sichtbar war. Stattdessen gibt es genau 2 feste Vorschlags-Buttons;
+        # "weiter scrollen" veraendert nur, welche 2 Namen darin stehen - eine
+        # dritte Zeile kann so grundsaetzlich nie angeschnitten auftauchen.
         self.suggestions_overlay = QWidget(self)
-        overlay_layout = QHBoxLayout(self.suggestions_overlay)
-        overlay_layout.setContentsMargins(0, 0, 0, 0)
-        overlay_layout.setSpacing(6)
+        self.suggestions_overlay_layout = QHBoxLayout(self.suggestions_overlay)
+        self.suggestions_overlay_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.suggestions_area = QScrollArea()
-        self.suggestions_area.setWidgetResizable(True)
-        self.suggestions_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.suggestions_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.suggestions_area.setStyleSheet("""
-            QScrollArea { background-color: #16213e; border: 3px solid #00d9ff; border-radius: 15px; }
-        """)
-        self.suggestions_container = QWidget()
-        self.suggestions_container.setStyleSheet("background-color: transparent;")
-        self.suggestions_layout = QVBoxLayout(self.suggestions_container)
-        self.suggestions_layout.setSpacing(8)
-        self.suggestions_layout.setContentsMargins(8, 8, 8, 8)
-        self.suggestions_area.setWidget(self.suggestions_container)
-        overlay_layout.addWidget(self.suggestions_area, 1, Qt.AlignmentFlag.AlignTop)
+        self.suggestions_box = QWidget()
+        self.suggestions_layout = QVBoxLayout(self.suggestions_box)
 
-        # Auf/Ab-Buttons statt Scrollbalken: ein Tap = ein Name weiter.
-        # Feste Hoehe = Zeilenhoehe der Vorschlags-Buttons, damit sie exakt auf
-        # oberster/unterster sichtbarer Zeile sitzen statt sich ueber die
-        # gesamte Overlay-Hoehe zu strecken (Rand = Border+Margin der Liste).
-        nav_col = QVBoxLayout()
-        nav_col.setContentsMargins(0, 11, 0, 11)
-        nav_col.setSpacing(8)  # gleicher Abstand wie zwischen den Namensbalken (suggestions_layout)
+        self.suggestion_row_buttons = []
+        for _ in range(2):
+            btn = QPushButton("")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #0f3460; color: white;
+                    border: none; border-radius: 10px;
+                    font-size: 24px; text-align: left; padding-left: 20px;
+                }
+                QPushButton:pressed { background-color: #00d9ff; color: #1a1a2e; }
+            """)
+            btn.clicked.connect(lambda checked, b=btn: self.on_suggestion_selected(b.text()))
+            self.suggestions_layout.addWidget(btn)
+            self.suggestion_row_buttons.append(btn)
+        self.suggestions_overlay_layout.addWidget(self.suggestions_box, 1, Qt.AlignmentFlag.AlignTop)
+
+        # Auf/Ab-Buttons statt Scrollbalken: ein Tap = ein Name weiter/zurueck.
+        self.suggestion_nav_layout = QVBoxLayout()
         self.btn_suggestion_up = QPushButton("▲")
         self.btn_suggestion_down = QPushButton("▼")
         for btn in (self.btn_suggestion_up, self.btn_suggestion_down):
-            btn.setFixedSize(80, 60)  # gleiche Breite wie btn_dropdown (80px), gleiche Hoehe wie Namensbalken
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet("""
                 QPushButton {
@@ -692,14 +697,17 @@ class FullscreenKeyboardPage(QWidget):
                 }
                 QPushButton:pressed { background-color: #00b8d4; }
             """)
-        nav_col.addWidget(self.btn_suggestion_up)
-        nav_col.addWidget(self.btn_suggestion_down)
-        nav_col.addStretch(1)
+        self.suggestion_nav_layout.addWidget(self.btn_suggestion_up)
+        self.suggestion_nav_layout.addWidget(self.btn_suggestion_down)  # Abstand dazwischen = Luecke wie im Mockup
+        self.suggestion_nav_layout.addStretch(1)
         self.btn_suggestion_up.clicked.connect(lambda: self._scroll_suggestions(-1))
         self.btn_suggestion_down.clicked.connect(lambda: self._scroll_suggestions(1))
-        overlay_layout.addLayout(nav_col)
+        self.suggestions_overlay_layout.addLayout(self.suggestion_nav_layout)
 
         self.suggestions_overlay.hide()
+        self.suggestion_offset = 0
+        self.filtered_suggestions = []
+        self._apply_responsive_metrics()
 
         layout.addSpacing(20)
         
@@ -905,20 +913,85 @@ class FullscreenKeyboardPage(QWidget):
             self.suggestions_overlay.show()
             self.suggestions_overlay.raise_()
 
-    def _scroll_suggestions(self, direction):
-        """Scrollt die Vorschlagsliste um genau einen Namen weiter/zurueck.
+    # Referenz-Aufloesung, fuer die die Pixelwerte unten urspruenglich
+    # entworfen wurden. Das 7-Zoll-Pi-Panel ist nativ 720x1280 (Hochformat),
+    # wird aber per Bildschirmrotation als 1280x720 (Querformat) betrieben -
+    # die Screenshots des Kiosk-Layouts sind eindeutig 16:9-Querformat.
+    # Alle Groessen werden ueber _px()/_px_w() proportional dazu skaliert,
+    # damit Eingabezeile, Dropdown und Vorschlagsbox auf jeder tatsaechlichen
+    # Bildschirmgroesse gleich aussehen, statt abgeschnitten zu sein.
+    DESIGN_REF_W = 1280
+    DESIGN_REF_H = 720
 
-        Die Schrittweite wird aus der tatsaechlich gerenderten Button-Hoehe
-        berechnet (nicht aus der nominalen minimumHeight), da die reale Hoehe
-        durch Schrift/Padding groesser ausfallen kann als angenommen.
-        """
-        step = 68  # Fallback, falls noch kein Button gerendert wurde
-        if self.suggestions_layout.count() > 0:
-            first_widget = self.suggestions_layout.itemAt(0).widget()
-            if first_widget:
-                step = first_widget.height() + self.suggestions_layout.spacing()
-        bar = self.suggestions_area.verticalScrollBar()
-        bar.setValue(bar.value() + direction * step)
+    def _current_screen_size(self):
+        scr = self.screen()
+        if scr is None and self.window() is not None:
+            scr = self.window().screen()
+        if scr is None:
+            scr = QApplication.primaryScreen()
+        if scr is not None:
+            geo = scr.availableGeometry()
+            if geo.width() > 0 and geo.height() > 0:
+                return geo.width(), geo.height()
+        return self.DESIGN_REF_W, self.DESIGN_REF_H
+
+    def _px(self, base_px):
+        """Skaliert einen Pixelwert proportional zur Bildschirmhoehe."""
+        _, h = self._current_screen_size()
+        return max(1, round(base_px * h / self.DESIGN_REF_H))
+
+    def _px_w(self, base_px):
+        """Skaliert einen Pixelwert proportional zur Bildschirmbreite."""
+        w, _ = self._current_screen_size()
+        return max(1, round(base_px * w / self.DESIGN_REF_W))
+
+    def _suggestion_box_metrics(self):
+        """Berechnet Zeilenhoehe, Abstaende und die daraus resultierende
+        Gesamthoehe der Vorschlagsbox EINMAL, aus derselben Quelle fuer Box
+        und Nav-Spalte - so koennen sie durch unabhaengiges Runden nie leicht
+        auseinanderlaufen (frueherer Bug: 2 getrennte Formeln, die nur beim
+        Referenzwert 1:1 uebereinstimmten)."""
+        row_h = self._px(60)
+        gap = self._px(8)
+        margin = self._px(8)
+        border = self._px(3)
+        box_height = margin * 2 + row_h * 2 + gap + border * 2
+        nav_margin = max(0, (box_height - row_h * 2 - gap) // 2)
+        return row_h, gap, margin, border, box_height, nav_margin
+
+    def _apply_responsive_metrics(self):
+        """Skaliert Eingabezeile, Dropdown- und Vorschlags-Buttons proportional
+        zur tatsaechlichen Bildschirmgroesse (siehe DESIGN_REF_W/H)."""
+        self.input_field.setFixedHeight(self._px(80))
+        self.btn_dropdown.setFixedSize(self._px_w(80), self._px(70))
+
+        row_h, gap, margin, border, box_height, nav_margin = self._suggestion_box_metrics()
+
+        for btn in self.suggestion_row_buttons:
+            btn.setFixedHeight(row_h)
+        self.suggestions_layout.setSpacing(gap)
+        self.suggestions_layout.setContentsMargins(margin, margin, margin, margin)
+        self.suggestions_box.setStyleSheet(f"""
+            QWidget {{
+                background-color: #16213e;
+                border: {border}px solid #00d9ff;
+                border-radius: {self._px(15)}px;
+            }}
+        """)
+
+        for btn in (self.btn_suggestion_up, self.btn_suggestion_down):
+            btn.setFixedSize(self._px_w(80), row_h)
+        self.suggestion_nav_layout.setContentsMargins(0, nav_margin, 0, nav_margin)
+        self.suggestion_nav_layout.setSpacing(gap)  # Luecke zwischen ▲/▼ wie im Mockup
+        self.suggestions_overlay_layout.setSpacing(self._px(6))
+
+        self._suggestion_box_height = box_height
+
+    def _scroll_suggestions(self, direction):
+        """Blaettert die feste 2-Zeilen-Anzeige um einen Namen weiter/zurueck."""
+        max_offset = max(0, len(self.filtered_suggestions) - len(self.suggestion_row_buttons))
+        self.suggestion_offset = max(0, min(self.suggestion_offset + direction, max_offset))
+        self._render_suggestion_rows()
 
     def _position_suggestions_overlay(self):
         """Platziert das Overlay direkt unter der Eingabezeile, als schwebende
@@ -926,63 +999,56 @@ class FullscreenKeyboardPage(QWidget):
         nach vorne, sonst waere sie bei Ueberlappung unsichtbar und unbedienbar).
 
         Die Box hat IMMER eine feste Hoehe fuer genau 2 Zeilen plus die
-        Auf/Ab-Buttons (150px) - unabhaengig davon, wie viele Treffer es gibt
-        (weniger als 2 Treffer -> die Box bleibt trotzdem 2 Zeilen hoch, mit
-        Leerraum darunter; mehr als 2 Treffer -> per Pfeiltasten durchscrollen).
-        Dadurch ist die Groesse immer exakt vorhersehbar, wie im Mockup.
+        Auf/Ab-Buttons - unabhaengig davon, wie viele Treffer es gibt (weniger
+        als 2 Treffer -> Box bleibt trotzdem 2 Zeilen hoch, mit leeren Zeilen;
+        mehr als 2 Treffer -> per Pfeiltasten durchblaettern). Da es dafuer
+        immer exakt 2 Buttons gibt (keine QScrollArea), kann nie eine dritte,
+        unvollstaendige Zeile ueber den Rand hinausragen.
         """
+        self._apply_responsive_metrics()
+
         x = self.input_row_widget.x()
         width = self.input_row_widget.width()
+        overlay_height = self._suggestion_box_height
 
-        nav_buttons_height = 11 + 60 + 8 + 60 + 11  # = 150: nav_col Margins+Buttons+Spacing (Zeile 677-682)
-        # Border(2*3) + Container-Margin(2*8) + 2 Zeilen a 60px + 8px Abstand = ebenfalls 150 -
-        # exakt Null Ueberschuss. Jede zusaetzliche Hoehe hier wuerde nicht als Luft erscheinen,
-        # sondern den Anfang einer dritten (nicht mehr vollstaendigen) Vorschlagszeile sichtbar
-        # machen - genau das Abschneiden, das die Box wie im Mockup vermeiden soll.
-        overlay_height = nav_buttons_height
-        self.suggestions_area.setFixedHeight(overlay_height)
-
-        y = self.input_row_widget.y() + self.input_row_widget.height() + 10
+        y = self.input_row_widget.y() + self.input_row_widget.height() + self._px(10)
         self.suggestions_overlay.setGeometry(x, y, width, overlay_height)
-        print(
-            f"[DEBUG suggestions_overlay] page.height()={self.height()} "
-            f"input_row.y()={self.input_row_widget.y()} input_row.height()={self.input_row_widget.height()} "
-            f"overlay.y()={y} overlay_height={overlay_height} overlay_bottom={y + overlay_height} "
-            f"space_to_page_bottom={self.height() - (y + overlay_height)}"
-        )
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._apply_responsive_metrics()
         if self.suggestions_overlay.isVisible():
             self._position_suggestions_overlay()
 
     def update_suggestions(self):
-        """Aktualisiert die Vorschlagsliste (grosse Buttons) basierend auf der Eingabe."""
-        while self.suggestions_layout.count():
-            item = self.suggestions_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
+        """Filtert die Vorschlaege passend zur aktuellen Eingabe und zeigt sie ab Zeile 0."""
         current_text = self.input_field.text().lower()
+        self.filtered_suggestions = [
+            name for name in self.all_suggestions
+            if current_text == "" or name.lower().startswith(current_text)
+        ]
+        self.suggestion_offset = 0
+        self._render_suggestion_rows()
 
-        for name in self.all_suggestions:
-            if name.lower().startswith(current_text) or current_text == "":
-                btn = QPushButton(name)
-                btn.setFixedHeight(60)
-                btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #0f3460; color: white;
-                        border: none; border-radius: 10px;
-                        font-size: 24px; text-align: left; padding-left: 20px;
-                    }
-                    QPushButton:pressed { background-color: #00d9ff; color: #1a1a2e; }
-                """)
-                btn.clicked.connect(lambda checked, n=name: self.on_suggestion_selected(n))
-                self.suggestions_layout.addWidget(btn)
+    def _render_suggestion_rows(self):
+        """Zeigt die 2 Namen ab suggestion_offset in den festen Zeilen-Buttons.
+
+        Genau 2 Buttons existieren immer (siehe setup_ui) - dadurch kann nie
+        eine dritte, unvollstaendige Zeile ueber die Boxgrenze hinausragen.
+        """
+        for i, btn in enumerate(self.suggestion_row_buttons):
+            idx = self.suggestion_offset + i
+            if idx < len(self.filtered_suggestions):
+                btn.setText(self.filtered_suggestions[idx])
+                btn.setEnabled(True)
+            else:
+                btn.setText("")
+                btn.setEnabled(False)
 
     def on_suggestion_selected(self, name):
         """Übernimmt den ausgewählten Vorschlag."""
+        if not name:
+            return
         self.input_field.setText(name)
         self.suggestions_overlay.hide()
     
