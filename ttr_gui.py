@@ -900,8 +900,7 @@ class FullscreenKeyboardPage(QWidget):
             self.update_suggestions()
             self._position_suggestions_overlay()
             self.suggestions_overlay.show()
-            # Bewusst KEIN raise_(): die Tastatur soll das Overlay ueberdecken,
-            # falls sich beide ueberlappen, nicht umgekehrt.
+            self.suggestions_overlay.raise_()
 
     def _scroll_suggestions(self, direction):
         """Scrollt die Vorschlagsliste um genau einen Namen weiter/zurueck.
@@ -919,9 +918,9 @@ class FullscreenKeyboardPage(QWidget):
         bar.setValue(bar.value() + direction * step)
 
     def _position_suggestions_overlay(self):
-        """Platziert das Overlay direkt unter der Eingabezeile. Die Tastatur
-        liegt im Z-Order ueber dem Overlay (kein raise_() in toggle_suggestions())
-        und ueberdeckt es daher, falls sich beide ueberlappen.
+        """Platziert das Overlay direkt unter der Eingabezeile, als schwebende
+        Box ueber der Tastatur (raise_() in toggle_suggestions() bringt sie
+        nach vorne, sonst waere sie bei Ueberlappung unsichtbar und unbedienbar).
 
         Die Box hat IMMER eine feste Hoehe fuer genau 2 Zeilen plus die
         Auf/Ab-Buttons (150px) - unabhaengig davon, wie viele Treffer es gibt
