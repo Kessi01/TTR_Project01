@@ -628,20 +628,9 @@ class FullscreenKeyboardPage(QWidget):
         self.input_field.setReadOnly(True)
         input_row.addWidget(self.input_field)
         
-        # Dropdown-Button für Vorschläge
+        # Dropdown-Button für Vorschläge - Groesse/Stylesheet werden in
+        # _apply_responsive_metrics() gesetzt (dort skaliert).
         self.btn_dropdown = QPushButton("▼")
-        self.btn_dropdown.setFixedSize(80, 70)
-        self.btn_dropdown.setStyleSheet("""
-            QPushButton {
-                background-color: #00d9ff;
-                color: #1a1a2e;
-                border: none;
-                border-radius: 15px;
-                font-size: 28px;
-                font-weight: bold;
-            }
-            QPushButton:pressed { background-color: #00b8d4; }
-        """)
         self.btn_dropdown.clicked.connect(self.toggle_suggestions)
         input_row.addWidget(self.btn_dropdown, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -902,21 +891,6 @@ class FullscreenKeyboardPage(QWidget):
             self._position_suggestions_overlay()
             self.suggestions_overlay.show()
             self.suggestions_overlay.raise_()
-            QTimer.singleShot(50, self._debug_dump_suggestion_geometry)
-
-    def _debug_dump_suggestion_geometry(self):
-        """TEMPORAER: gibt die tatsaechlichen, nach dem Layout-Durchlauf
-        gueltigen Geometrien aus - zeigt ob ein Abstand im Code auch
-        wirklich als Abstand gerendert wird."""
-        r0 = self.suggestion_row_buttons[0].geometry()
-        r1 = self.suggestion_row_buttons[1].geometry()
-        n0 = self.btn_suggestion_up.geometry()
-        n1 = self.btn_suggestion_down.geometry()
-        print(
-            f"[DEBUG geometry] box={self.suggestions_box.geometry()} "
-            f"row0={r0} row1={r1} row_gap={r1.y() - (r0.y() + r0.height())} "
-            f"nav0={n0} nav1={n1} nav_gap={n1.y() - (n0.y() + n0.height())}"
-        )
 
     # Referenz-Groesse, fuer die die Pixelwerte unten urspruenglich entworfen
     # wurden. _px()/_px_w() skalieren ALLES relativ zur tatsaechlichen Groesse
@@ -983,25 +957,67 @@ class FullscreenKeyboardPage(QWidget):
         Vorschlagsbox selbst wird separat in _apply_suggestion_metrics()
         skaliert, sobald die tatsaechlich verfuegbare Hoehe bekannt ist."""
         self.input_field.setFixedHeight(self._px(80))
-        self.btn_dropdown.setFixedSize(self._px_w(80), self._px(70))  # unveraendert
+
+        dropdown_w, dropdown_h = self._px_w(80), self._px(70)  # unveraendert
+        # min/max im Stylesheet exakt auf dropdown_w/dropdown_h - siehe
+        # Kommentar bei suggestion_row_buttons in _apply_suggestion_metrics().
+        self.btn_dropdown.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #00d9ff;
+                color: #1a1a2e;
+                border: none;
+                border-radius: 15px;
+                font-size: 28px;
+                font-weight: bold;
+                padding: 0px;
+                min-height: {dropdown_h}px; max-height: {dropdown_h}px;
+                min-width: {dropdown_w}px; max-width: {dropdown_w}px;
+            }}
+            QPushButton:pressed {{ background-color: #00b8d4; }}
+        """)
+        self.btn_dropdown.setFixedSize(dropdown_w, dropdown_h)
 
     def _apply_suggestion_metrics(self, box_height):
         """Skaliert die Vorschlags-Buttons und gibt die dafuer tatsaechlich
-        benoetigte Gesamthoehe zurueck (siehe _position_suggestions_overlay)."""
+        benoetigte Gesamthoehe zurueck (siehe _position_suggestions_overlay).
+
+        WICHTIG: jede QPushButton-Stylesheet hier MUSS padding und
+        min-height explizit auf 0 setzen. Die globale DARK_STYLESHEET (ganz
+        oben in der Datei) setzt fuer JEDEN QPushButton "padding: 20px;
+        min-height: 60px;" - das wird von Qt via CSS-Boxmodell durchgesetzt
+        und ueberschreibt setFixedHeight()/setFixedSize() auf manchen
+        Plattformen (bestaetigt: auf dem Pi mit qt6ct-Theme wurden Buttons
+        dadurch ca. 40-70% groesser als gesetzt gerendert, wodurch Zeilen und
+        Nav-Buttons sich ueberlappten - auf Windows ohne dieses Theme fiel es
+        nie auf)."""
         row_h, nav_h, gap, margin, row_v_margin, nav_v_margin, border, box_height = (
             self._suggestion_box_metrics(box_height)
         )
 
+        # Qt's Stylesheet-Boxmodell ist content-box: min-/max-height gelten fuer
+        # den Innenbereich, die Border wird ON TOP addiert (bestaetigt: mit
+        # min/max-height=row_h und border=3px kam der Button 2*3=6px zu hoch
+        # heraus). Deshalb hier row_h um die Border kuerzen, damit die
+        # tatsaechlich gerenderte Gesamthoehe wieder exakt row_h ist.
+        row_css_h = max(1, row_h - 2 * border)
         for btn in self.suggestion_row_buttons:
-            btn.setFixedHeight(row_h)
+            # min-height/max-height im Stylesheet MUESSEN mit row_h
+            # uebereinstimmen: die globale DARK_STYLESHEET setzt fuer JEDEN
+            # QPushButton "padding: 20px; min-height: 60px", und je nach
+            # Qt-Style/Plattform kann diese CSS-Vorgabe setFixedHeight()
+            # ueberstimmen (bestaetigter Bug auf dem Pi). Wenn CSS- und
+            # Python-Wert exakt uebereinstimmen, ist es egal, welcher "gewinnt".
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: #0f3460; color: white;
                     border: {border}px solid #00d9ff; border-radius: 10px;
-                    font-size: 24px; text-align: left; padding-left: 20px;
+                    font-size: 24px; text-align: left; padding: 0px 0px 0px 20px;
+                    min-height: {row_css_h}px; max-height: {row_css_h}px;
+                    min-width: 0px;
                 }}
                 QPushButton:pressed {{ background-color: #00d9ff; color: #1a1a2e; }}
             """)
+            btn.setFixedHeight(row_h)
         self.suggestions_layout.setSpacing(gap)
         self.suggestions_layout.setContentsMargins(margin, row_v_margin, margin, row_v_margin)
         self.suggestions_box.setStyleSheet(f"""
@@ -1012,16 +1028,22 @@ class FullscreenKeyboardPage(QWidget):
             }}
         """)
 
+        nav_w = self._px_w(80)
         for btn in (self.btn_suggestion_up, self.btn_suggestion_down):
-            btn.setFixedSize(self._px_w(80), nav_h)
-            btn.setStyleSheet("""
-                QPushButton {
+            # min/max im Stylesheet exakt auf nav_w/nav_h - siehe Kommentar
+            # bei suggestion_row_buttons oben.
+            btn.setStyleSheet(f"""
+                QPushButton {{
                     background-color: #00d9ff; color: #1a1a2e;
                     border: none; border-radius: 10px;
                     font-size: 20px; font-weight: bold;
-                }
-                QPushButton:pressed { background-color: #00b8d4; }
+                    padding: 0px;
+                    min-height: {nav_h}px; max-height: {nav_h}px;
+                    min-width: {nav_w}px; max-width: {nav_w}px;
+                }}
+                QPushButton:pressed {{ background-color: #00b8d4; }}
             """)
+            btn.setFixedSize(nav_w, nav_h)
         self.suggestion_nav_layout.setContentsMargins(0, nav_v_margin, 0, nav_v_margin)
         self.suggestion_nav_layout.setSpacing(gap)  # Luecke zwischen ▲/▼ wie im Mockup
         self.suggestions_overlay_layout.setSpacing(self._px(6))
