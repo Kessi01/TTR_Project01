@@ -933,7 +933,8 @@ class FullscreenKeyboardPage(QWidget):
         border = 2 * 3      # QScrollArea-Rahmen oben+unten
         margins = 2 * 8     # Container-Margin oben+unten
         content = rows * 60 + (rows - 1) * 8
-        overlay_height = max(150, border + margins + content + 8)  # + Sicherheitspuffer
+        nav_buttons_height = 11 + 60 + 8 + 60 + 11  # nav_col Margins+Buttons+Spacing (Zeile 677-682)
+        overlay_height = max(nav_buttons_height + 8, border + margins + content + 8)  # + Sicherheitspuffer
         self.suggestions_overlay.setGeometry(x, y, width, overlay_height)
 
     def resizeEvent(self, event):
