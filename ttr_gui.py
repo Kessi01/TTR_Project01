@@ -945,9 +945,14 @@ class FullscreenKeyboardPage(QWidget):
         der Dropdown-Toggle-Button neben der Eingabezeile (auf Wunsch);
         reicht die uebergebene Hoehe dafuer nicht aus, wird die Box
         entsprechend vergroessert statt die Buttons zu quetschen."""
-        gap = self._px(8)
-        margin = self._px(8)
-        border = self._px(3)
+        # Untergrenzen (in echten Pixeln, nicht weiter herunterskaliert):
+        # verhindert, dass Abstand/Rand auf ungewohnten Aufloesungen/
+        # Remote-Desktop-Skalierungen (z.B. Raspberry Pi Connect) auf
+        # praktisch 0 zusammenschrumpfen - genau das liess Namensbalken und
+        # Nav-Buttons zuvor optisch zu einem einzigen Block verschmelzen.
+        gap = max(self._px(8), 6)
+        margin = max(self._px(8), 6)
+        border = max(self._px(3), 2)
 
         nav_h = self._px(70)  # exakt wie btn_dropdown - siehe _apply_responsive_metrics
         row_h = max(1, round(nav_h / self.NAV_BUTTON_SCALE))
@@ -1010,6 +1015,12 @@ class FullscreenKeyboardPage(QWidget):
         self.suggestion_nav_layout.setContentsMargins(0, nav_v_margin, 0, nav_v_margin)
         self.suggestion_nav_layout.setSpacing(gap)  # Luecke zwischen ▲/▼ wie im Mockup
         self.suggestions_overlay_layout.setSpacing(self._px(6))
+
+        print(
+            f"[DEBUG suggestion_box] page={self.width()}x{self.height()} "
+            f"gap={gap} margin={margin} border={border} row_h={row_h} nav_h={nav_h} "
+            f"row_v_margin={row_v_margin} nav_v_margin={nav_v_margin} box_height={box_height}"
+        )
 
         self._suggestion_box_height = box_height
         return box_height
