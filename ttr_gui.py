@@ -902,6 +902,21 @@ class FullscreenKeyboardPage(QWidget):
             self._position_suggestions_overlay()
             self.suggestions_overlay.show()
             self.suggestions_overlay.raise_()
+            QTimer.singleShot(50, self._debug_dump_suggestion_geometry)
+
+    def _debug_dump_suggestion_geometry(self):
+        """TEMPORAER: gibt die tatsaechlichen, nach dem Layout-Durchlauf
+        gueltigen Geometrien aus - zeigt ob ein Abstand im Code auch
+        wirklich als Abstand gerendert wird."""
+        r0 = self.suggestion_row_buttons[0].geometry()
+        r1 = self.suggestion_row_buttons[1].geometry()
+        n0 = self.btn_suggestion_up.geometry()
+        n1 = self.btn_suggestion_down.geometry()
+        print(
+            f"[DEBUG geometry] box={self.suggestions_box.geometry()} "
+            f"row0={r0} row1={r1} row_gap={r1.y() - (r0.y() + r0.height())} "
+            f"nav0={n0} nav1={n1} nav_gap={n1.y() - (n0.y() + n0.height())}"
+        )
 
     # Referenz-Groesse, fuer die die Pixelwerte unten urspruenglich entworfen
     # wurden. _px()/_px_w() skalieren ALLES relativ zur tatsaechlichen Groesse
