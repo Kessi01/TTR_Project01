@@ -667,8 +667,8 @@ class FullscreenKeyboardPage(QWidget):
         self.suggestions_layout = QVBoxLayout(self.suggestions_box)
 
         # Styles/Groessen der Buttons werden vollstaendig in
-        # _apply_responsive_metrics() gesetzt (dort skaliert und dort auch
-        # neu gesetzt, wenn sich die Bildschirmgroesse aendert).
+        # _apply_suggestion_metrics() gesetzt, sobald die verfuegbare Hoehe
+        # bekannt ist (siehe _position_suggestions_overlay).
         self.suggestion_row_buttons = []
         for _ in range(2):
             btn = QPushButton("")
@@ -680,7 +680,7 @@ class FullscreenKeyboardPage(QWidget):
 
         # Auf/Ab-Buttons statt Scrollbalken: ein Tap = ein Name weiter/zurueck.
         # Keine addStretch() hier - die Buttons werden ueber symmetrische
-        # Contents-Margins (in _apply_responsive_metrics) vertikal zentriert,
+        # Contents-Margins (in _apply_suggestion_metrics) vertikal zentriert,
         # ein zusaetzlicher Stretch wuerde die Symmetrie durch Rundungsreste
         # nur nach unten verschieben.
         self.suggestion_nav_layout = QVBoxLayout()
@@ -903,13 +903,14 @@ class FullscreenKeyboardPage(QWidget):
             self.suggestions_overlay.show()
             self.suggestions_overlay.raise_()
 
-    # Referenz-Aufloesung, fuer die die Pixelwerte unten urspruenglich
-    # entworfen wurden. Das 7-Zoll-Pi-Panel ist nativ 720x1280 (Hochformat),
-    # wird aber per Bildschirmrotation als 1280x720 (Querformat) betrieben -
-    # die Screenshots des Kiosk-Layouts sind eindeutig 16:9-Querformat.
-    # Alle Groessen werden ueber _px()/_px_w() proportional dazu skaliert,
-    # damit Eingabezeile, Dropdown und Vorschlagsbox auf jeder tatsaechlichen
-    # Bildschirmgroesse gleich aussehen, statt abgeschnitten zu sein.
+    # Referenz-Groesse, fuer die die Pixelwerte unten urspruenglich entworfen
+    # wurden. _px()/_px_w() skalieren ALLES relativ zur tatsaechlichen Groesse
+    # dieser Seite (self.height()/self.width()) und NICHT zur QScreen-Aufloesung:
+    # die Seite fuellt im Kiosk-Modus ohnehin den ganzen Bildschirm, ist also
+    # immer korrekt - waehrend QScreen()-Werte sich je nach Bildschirmrotation,
+    # Remote-Desktop-Software (z.B. Raspberry Pi Connect) oder Skalierung des
+    # Fensters als falsch herausstellen koennen (das genau fuehrte zu winzigen,
+    # zusammenlaufenden Raendern auf dem Pi trotz korrekter Formel).
     DESIGN_REF_W = 1280
     DESIGN_REF_H = 720
 
@@ -918,57 +919,58 @@ class FullscreenKeyboardPage(QWidget):
     # neben der Eingabezeile entsprechen). Der Toggle selbst bleibt gleich.
     NAV_BUTTON_SCALE = 1.12
 
-    def _current_screen_size(self):
-        scr = self.screen()
-        if scr is None and self.window() is not None:
-            scr = self.window().screen()
-        if scr is None:
-            scr = QApplication.primaryScreen()
-        if scr is not None:
-            geo = scr.availableGeometry()
-            if geo.width() > 0 and geo.height() > 0:
-                return geo.width(), geo.height()
-        return self.DESIGN_REF_W, self.DESIGN_REF_H
+    # Basis-Gesamthoehe der Vorschlagsbox (bei DESIGN_REF_H) - bewusst
+    # grosszuegig, die Box darf die oberen Tastaturreihen ueberdecken
+    # (raise_() bringt sie nach vorne; waehrend sie offen ist, tippt man
+    # ohnehin keinen Buchstaben, sondern waehlt einen Vorschlag aus).
+    SUGGESTION_BOX_BASE_HEIGHT = 280
 
     def _px(self, base_px):
-        """Skaliert einen Pixelwert proportional zur Bildschirmhoehe."""
-        _, h = self._current_screen_size()
+        """Skaliert einen Pixelwert proportional zur tatsaechlichen Seitenhoehe."""
+        h = self.height() or self.DESIGN_REF_H
         return max(1, round(base_px * h / self.DESIGN_REF_H))
 
     def _px_w(self, base_px):
-        """Skaliert einen Pixelwert proportional zur Bildschirmbreite."""
-        w, _ = self._current_screen_size()
+        """Skaliert einen Pixelwert proportional zur tatsaechlichen Seitenbreite."""
+        w = self.width() or self.DESIGN_REF_W
         return max(1, round(base_px * w / self.DESIGN_REF_W))
 
-    def _suggestion_box_metrics(self):
-        """Berechnet Zeilenhoehe, Abstaende und die daraus resultierende
-        Gesamthoehe der Vorschlagsbox EINMAL, aus derselben Quelle fuer Box
-        und Nav-Spalte - so koennen sie durch unabhaengiges Runden nie leicht
-        auseinanderlaufen (frueherer Bug: 2 getrennte Formeln, die nur beim
-        Referenzwert 1:1 uebereinstimmten)."""
-        row_h = self._px(60)
-        nav_h = round(row_h * self.NAV_BUTTON_SCALE)
+    def _suggestion_box_metrics(self, box_height):
+        """Verteilt eine gegebene Gesamthoehe auf Namens-Balken, Nav-Buttons,
+        Abstaende und Raender (statt von einer angenommenen Bildschirmgroesse
+        auszugehen). Die Box nutzt so immer den kompletten tatsaechlich
+        verfuegbaren Platz zwischen Eingabezeile und Tastatur - unabhaengig
+        von der echten Bildschirmaufloesung, die wir nicht zuverlaessig
+        erraten koennen. Namens-Balken und Nav-Buttons behalten dabei ihr
+        Groessenverhaeltnis (Nav-Buttons 12% groesser als die Balken)."""
         gap = self._px(8)
         margin = self._px(8)
         border = self._px(3)
 
+        content_h = max(2, box_height - margin * 2 - border * 2)
+        # content_h = nav_h*2 + gap, mit nav_h = row_h * NAV_BUTTON_SCALE
+        nav_h = max(1, (content_h - gap) // 2)
+        row_h = max(1, round(nav_h / self.NAV_BUTTON_SCALE))
+
         rows_stack_h = row_h * 2 + gap
         nav_stack_h = nav_h * 2 + gap
-        content_h = max(rows_stack_h, nav_stack_h)
-        box_height = margin * 2 + content_h + border * 2
-
         row_v_margin = margin + max(0, (content_h - rows_stack_h) // 2)
         nav_v_margin = margin + max(0, (content_h - nav_stack_h) // 2)
-        return row_h, nav_h, gap, margin, row_v_margin, nav_v_margin, border, box_height
+        return row_h, nav_h, gap, margin, row_v_margin, nav_v_margin, border
 
     def _apply_responsive_metrics(self):
-        """Skaliert Eingabezeile, Dropdown- und Vorschlags-Buttons proportional
-        zur tatsaechlichen Bildschirmgroesse (siehe DESIGN_REF_W/H)."""
+        """Skaliert Eingabezeile und Dropdown-Toggle proportional zur
+        tatsaechlichen Bildschirmgroesse (siehe DESIGN_REF_W/H). Die
+        Vorschlagsbox selbst wird separat in _apply_suggestion_metrics()
+        skaliert, sobald die tatsaechlich verfuegbare Hoehe bekannt ist."""
         self.input_field.setFixedHeight(self._px(80))
         self.btn_dropdown.setFixedSize(self._px_w(80), self._px(70))  # unveraendert
 
-        row_h, nav_h, gap, margin, row_v_margin, nav_v_margin, border, box_height = (
-            self._suggestion_box_metrics()
+    def _apply_suggestion_metrics(self, box_height):
+        """Skaliert die Vorschlags-Buttons so, dass sie exakt die uebergebene
+        Gesamthoehe ausfuellen (siehe _position_suggestions_overlay)."""
+        row_h, nav_h, gap, margin, row_v_margin, nav_v_margin, border = (
+            self._suggestion_box_metrics(box_height)
         )
 
         for btn in self.suggestion_row_buttons:
@@ -1025,13 +1027,18 @@ class FullscreenKeyboardPage(QWidget):
         immer exakt 2 Buttons gibt (keine QScrollArea), kann nie eine dritte,
         unvollstaendige Zeile ueber den Rand hinausragen.
         """
-        self._apply_responsive_metrics()
-
         x = self.input_row_widget.x()
         width = self.input_row_widget.width()
-        overlay_height = self._suggestion_box_height
 
-        y = self.input_row_widget.y() + self.input_row_widget.height() + self._px(10)
+        gap = self._px(10)
+        y = self.input_row_widget.y() + self.input_row_widget.height() + gap
+        # Grosszuegige, proportional skalierte Hoehe (siehe SUGGESTION_BOX_BASE_HEIGHT) -
+        # nach unten hin nur durch den Seitenrand begrenzt, nicht durch die
+        # Tastatur: die Box darf deren obere Reihen ueberdecken (raise_() in
+        # toggle_suggestions() bringt sie nach vorne).
+        overlay_height = min(self._px(self.SUGGESTION_BOX_BASE_HEIGHT), max(self._px(100), self.height() - y - gap))
+
+        self._apply_suggestion_metrics(overlay_height)
         self.suggestions_overlay.setGeometry(x, y, width, overlay_height)
 
     def resizeEvent(self, event):
