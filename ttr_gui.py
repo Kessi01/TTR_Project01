@@ -702,7 +702,6 @@ class FullscreenKeyboardPage(QWidget):
         
         # ===== Tastatur =====
         keyboard_widget = QWidget()
-        self.keyboard_widget = keyboard_widget
         keyboard_layout = QVBoxLayout(keyboard_widget)
         keyboard_layout.setSpacing(8)
         
@@ -901,7 +900,8 @@ class FullscreenKeyboardPage(QWidget):
             self.update_suggestions()
             self._position_suggestions_overlay()
             self.suggestions_overlay.show()
-            self.suggestions_overlay.raise_()
+            # Bewusst KEIN raise_(): die Tastatur soll das Overlay ueberdecken,
+            # falls sich beide ueberlappen, nicht umgekehrt.
 
     def _scroll_suggestions(self, direction):
         """Scrollt die Vorschlagsliste um genau einen Namen weiter/zurueck.
@@ -919,17 +919,15 @@ class FullscreenKeyboardPage(QWidget):
         bar.setValue(bar.value() + direction * step)
 
     def _position_suggestions_overlay(self):
-        """Platziert das Overlay direkt unter der Eingabezeile.
+        """Platziert das Overlay direkt unter der Eingabezeile. Die Tastatur
+        liegt im Z-Order ueber dem Overlay (kein raise_() in toggle_suggestions())
+        und ueberdeckt es daher, falls sich beide ueberlappen.
 
         Die Box hat IMMER eine feste Hoehe fuer genau 2 Zeilen plus die
         Auf/Ab-Buttons (150px) - unabhaengig davon, wie viele Treffer es gibt
         (weniger als 2 Treffer -> die Box bleibt trotzdem 2 Zeilen hoch, mit
         Leerraum darunter; mehr als 2 Treffer -> per Pfeiltasten durchscrollen).
         Dadurch ist die Groesse immer exakt vorhersehbar, wie im Mockup.
-
-        Die Box ueberlappt NIE die Tastatur: reicht der Platz zwischen
-        Eingabezeile und Tastatur nicht aus, klappt sie stattdessen nach oben
-        ueber die Eingabezeile.
         """
         x = self.input_row_widget.x()
         width = self.input_row_widget.width()
@@ -938,28 +936,7 @@ class FullscreenKeyboardPage(QWidget):
         # Border(2*3) + Container-Margin(2*8) + 2 Zeilen a 60px + 8px Abstand = ebenfalls 150.
         self.suggestions_area.setFixedHeight(overlay_height)
 
-        input_top = self.input_row_widget.y()
-        input_bottom = input_top + self.input_row_widget.height()
-        gap = 10
-        keyboard_top = self.keyboard_widget.y() if hasattr(self, "keyboard_widget") else self.height()
-        space_below = keyboard_top - input_bottom - gap
-        space_above = input_top - gap
-
-        if space_below >= overlay_height:
-            y = input_bottom + gap
-        elif space_above >= overlay_height:
-            y = input_top - overlay_height - gap
-        else:
-            # Weder oben noch unten reicht der volle Platz -> die groessere
-            # der beiden Seiten nehmen und die Box notgedrungen anpassen,
-            # damit sie zumindest nicht die Tastatur ueberlappt.
-            if space_below >= space_above:
-                overlay_height = max(50, space_below)
-                y = input_bottom + gap
-            else:
-                overlay_height = max(50, space_above)
-                y = input_top - overlay_height - gap
-
+        y = self.input_row_widget.y() + self.input_row_widget.height() + 10
         self.suggestions_overlay.setGeometry(x, y, width, overlay_height)
 
     def resizeEvent(self, event):
