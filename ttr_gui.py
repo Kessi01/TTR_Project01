@@ -921,21 +921,35 @@ class FullscreenKeyboardPage(QWidget):
         """Platziert das Overlay direkt unter der Eingabezeile, über der Tastatur.
 
         Es sind immer nur 2 Zeilen gleichzeitig sichtbar (mehr Treffer werden
-        per Auf/Ab-Button einzeln durchgescrollt). Hoehe wird bewusst mit
-        etwas Puffer berechnet, damit die untere Zeile nie am Rand der
-        QScrollArea abgeschnitten wird, und mindestens so gross wie die
-        Auf/Ab-Buttons selbst brauchen (150px), damit die nie ueberlaufen.
+        per Auf/Ab-Button einzeln durchgescrollt). Passt nicht mehr genug Platz
+        unterhalb der Eingabezeile auf den Bildschirm, klappt das Overlay
+        stattdessen nach oben auf - so wird es nie am Seitenrand abgeschnitten,
+        egal wie klein das Display ist.
         """
         x = self.input_row_widget.x()
-        y = self.input_row_widget.y() + self.input_row_widget.height() + 10
         width = self.input_row_widget.width()
         rows = min(max(self.suggestions_layout.count(), 1), 2)
         border = 2 * 3      # QScrollArea-Rahmen oben+unten
         margins = 2 * 8     # Container-Margin oben+unten
         content = rows * 60 + (rows - 1) * 8
         nav_buttons_height = 11 + 60 + 8 + 60 + 11  # nav_col Margins+Buttons+Spacing (Zeile 677-682)
-        safety_buffer = 30  # grosszuegiger Puffer, damit nichts am Rand abgeschnitten wird
-        overlay_height = max(nav_buttons_height + safety_buffer, border + margins + content + safety_buffer)
+        safety_buffer = 20  # Puffer, damit nichts am Rand abgeschnitten wird
+        desired_height = max(nav_buttons_height + safety_buffer, border + margins + content + safety_buffer)
+
+        input_top = self.input_row_widget.y()
+        input_bottom = input_top + self.input_row_widget.height()
+        space_below = self.height() - input_bottom - 10
+        space_above = input_top - 10
+
+        if space_below >= desired_height or space_below >= space_above:
+            # Genug Platz unterhalb der Eingabezeile - Overlay wie bisher darunter zeigen.
+            overlay_height = min(desired_height, max(space_below, nav_buttons_height))
+            y = input_bottom + 10
+        else:
+            # Nicht genug Platz unterhalb -> nach oben ueber die Eingabezeile klappen.
+            overlay_height = min(desired_height, max(space_above, nav_buttons_height))
+            y = input_top - overlay_height - 10
+
         self.suggestions_overlay.setGeometry(x, y, width, overlay_height)
 
     def resizeEvent(self, event):
