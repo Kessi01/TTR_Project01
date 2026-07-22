@@ -604,10 +604,13 @@ class FullscreenKeyboardPage(QWidget):
         top_layout.addWidget(spacer_right)
         
         layout.addLayout(top_layout)
-        
-        # ===== Mitte: Eingabefeld mit Dropdown =====
-        layout.addStretch()
-        
+        layout.addSpacing(20)
+
+        # ===== Eingabefeld mit Dropdown =====
+        # Bewusst kein addStretch() davor: die Eingabezeile muss so weit oben
+        # wie moeglich sitzen, damit auf kleineren Bildschirmen (z.B. dem
+        # 7-Zoll-Touchscreen am Pi) garantiert genug Platz fuer das
+        # Vorschlags-Overlay (150px) bis zur Tastatur bleibt.
         input_row = QHBoxLayout()
         
         self.input_field = QLineEdit()
