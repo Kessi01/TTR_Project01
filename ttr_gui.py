@@ -702,6 +702,7 @@ class FullscreenKeyboardPage(QWidget):
         
         # ===== Tastatur =====
         keyboard_widget = QWidget()
+        self.keyboard_widget = keyboard_widget
         keyboard_layout = QVBoxLayout(keyboard_widget)
         keyboard_layout.setSpacing(8)
         
@@ -918,43 +919,46 @@ class FullscreenKeyboardPage(QWidget):
         bar.setValue(bar.value() + direction * step)
 
     def _position_suggestions_overlay(self):
-        """Platziert das Overlay direkt unter der Eingabezeile, über der Tastatur.
+        """Platziert das Overlay direkt unter der Eingabezeile.
 
-        Es sind immer nur 2 Zeilen gleichzeitig sichtbar (mehr Treffer werden
-        per Auf/Ab-Button einzeln durchgescrollt). Die Scroll-Liste bekommt eine
-        exakte Fixhoehe fuer genau 2 volle Zeilen, damit NIE eine dritte,
-        angeschnittene Zeile durchscheint. Passt nicht genug Platz unterhalb
-        der Eingabezeile auf den Bildschirm, klappt das Overlay stattdessen
-        nach oben auf, statt am Seitenrand abgeschnitten zu werden.
+        Die Box hat IMMER eine feste Hoehe fuer genau 2 Zeilen plus die
+        Auf/Ab-Buttons (150px) - unabhaengig davon, wie viele Treffer es gibt
+        (weniger als 2 Treffer -> die Box bleibt trotzdem 2 Zeilen hoch, mit
+        Leerraum darunter; mehr als 2 Treffer -> per Pfeiltasten durchscrollen).
+        Dadurch ist die Groesse immer exakt vorhersehbar, wie im Mockup.
+
+        Die Box ueberlappt NIE die Tastatur: reicht der Platz zwischen
+        Eingabezeile und Tastatur nicht aus, klappt sie stattdessen nach oben
+        ueber die Eingabezeile.
         """
         x = self.input_row_widget.x()
         width = self.input_row_widget.width()
-        rows = min(max(self.suggestions_layout.count(), 1), 2)
-        border = 2 * 3      # QScrollArea-Rahmen oben+unten
-        margins = 2 * 8     # Container-Margin oben+unten
-        content = rows * 60 + (rows - 1) * 8
-        list_height = border + margins + content  # exakt N volle Zeilen, kein Rest sichtbar
-        nav_buttons_height = 11 + 60 + 8 + 60 + 11  # nav_col Margins+Buttons+Spacing (Zeile 677-682)
-        desired_height = max(nav_buttons_height, list_height)
 
-        # Fixhoehe erzwingen, damit die QHBoxLayout die Liste NICHT ueber die
-        # exakte Zeilenhoehe hinaus streckt (das war die Ursache der angeschnittenen
-        # dritten Zeile) - ueberschuessiger Platz bleibt beim nav_col (siehe addStretch dort).
-        self.suggestions_area.setFixedHeight(list_height)
+        overlay_height = 11 + 60 + 8 + 60 + 11  # = 150: nav_col Margins+Buttons+Spacing (Zeile 677-682)
+        # Border(2*3) + Container-Margin(2*8) + 2 Zeilen a 60px + 8px Abstand = ebenfalls 150.
+        self.suggestions_area.setFixedHeight(overlay_height)
 
         input_top = self.input_row_widget.y()
         input_bottom = input_top + self.input_row_widget.height()
-        space_below = self.height() - input_bottom - 10
-        space_above = input_top - 10
+        gap = 10
+        keyboard_top = self.keyboard_widget.y() if hasattr(self, "keyboard_widget") else self.height()
+        space_below = keyboard_top - input_bottom - gap
+        space_above = input_top - gap
 
-        if space_below >= desired_height or space_below >= space_above:
-            # Genug Platz unterhalb der Eingabezeile - Overlay wie bisher darunter zeigen.
-            overlay_height = min(desired_height, max(space_below, nav_buttons_height))
-            y = input_bottom + 10
+        if space_below >= overlay_height:
+            y = input_bottom + gap
+        elif space_above >= overlay_height:
+            y = input_top - overlay_height - gap
         else:
-            # Nicht genug Platz unterhalb -> nach oben ueber die Eingabezeile klappen.
-            overlay_height = min(desired_height, max(space_above, nav_buttons_height))
-            y = input_top - overlay_height - 10
+            # Weder oben noch unten reicht der volle Platz -> die groessere
+            # der beiden Seiten nehmen und die Box notgedrungen anpassen,
+            # damit sie zumindest nicht die Tastatur ueberlappt.
+            if space_below >= space_above:
+                overlay_height = max(50, space_below)
+                y = input_bottom + gap
+            else:
+                overlay_height = max(50, space_above)
+                y = input_top - overlay_height - gap
 
         self.suggestions_overlay.setGeometry(x, y, width, overlay_height)
 
