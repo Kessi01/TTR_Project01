@@ -667,7 +667,7 @@ class FullscreenKeyboardPage(QWidget):
         self.suggestions_layout.setSpacing(8)
         self.suggestions_layout.setContentsMargins(8, 8, 8, 8)
         self.suggestions_area.setWidget(self.suggestions_container)
-        overlay_layout.addWidget(self.suggestions_area, 1)
+        overlay_layout.addWidget(self.suggestions_area, 1, Qt.AlignmentFlag.AlignTop)
 
         # Auf/Ab-Buttons statt Scrollbalken: ein Tap = ein Name weiter.
         # Feste Hoehe = Zeilenhoehe der Vorschlags-Buttons, damit sie exakt auf
@@ -921,10 +921,11 @@ class FullscreenKeyboardPage(QWidget):
         """Platziert das Overlay direkt unter der Eingabezeile, über der Tastatur.
 
         Es sind immer nur 2 Zeilen gleichzeitig sichtbar (mehr Treffer werden
-        per Auf/Ab-Button einzeln durchgescrollt). Passt nicht mehr genug Platz
-        unterhalb der Eingabezeile auf den Bildschirm, klappt das Overlay
-        stattdessen nach oben auf - so wird es nie am Seitenrand abgeschnitten,
-        egal wie klein das Display ist.
+        per Auf/Ab-Button einzeln durchgescrollt). Die Scroll-Liste bekommt eine
+        exakte Fixhoehe fuer genau 2 volle Zeilen, damit NIE eine dritte,
+        angeschnittene Zeile durchscheint. Passt nicht genug Platz unterhalb
+        der Eingabezeile auf den Bildschirm, klappt das Overlay stattdessen
+        nach oben auf, statt am Seitenrand abgeschnitten zu werden.
         """
         x = self.input_row_widget.x()
         width = self.input_row_widget.width()
@@ -932,9 +933,14 @@ class FullscreenKeyboardPage(QWidget):
         border = 2 * 3      # QScrollArea-Rahmen oben+unten
         margins = 2 * 8     # Container-Margin oben+unten
         content = rows * 60 + (rows - 1) * 8
+        list_height = border + margins + content  # exakt N volle Zeilen, kein Rest sichtbar
         nav_buttons_height = 11 + 60 + 8 + 60 + 11  # nav_col Margins+Buttons+Spacing (Zeile 677-682)
-        safety_buffer = 20  # Puffer, damit nichts am Rand abgeschnitten wird
-        desired_height = max(nav_buttons_height + safety_buffer, border + margins + content + safety_buffer)
+        desired_height = max(nav_buttons_height, list_height)
+
+        # Fixhoehe erzwingen, damit die QHBoxLayout die Liste NICHT ueber die
+        # exakte Zeilenhoehe hinaus streckt (das war die Ursache der angeschnittenen
+        # dritten Zeile) - ueberschuessiger Platz bleibt beim nav_col (siehe addStretch dort).
+        self.suggestions_area.setFixedHeight(list_height)
 
         input_top = self.input_row_widget.y()
         input_bottom = input_top + self.input_row_widget.height()
