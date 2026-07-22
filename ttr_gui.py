@@ -936,15 +936,20 @@ class FullscreenKeyboardPage(QWidget):
 
         nav_buttons_height = 11 + 60 + 8 + 60 + 11  # = 150: nav_col Margins+Buttons+Spacing (Zeile 677-682)
         # Border(2*3) + Container-Margin(2*8) + 2 Zeilen a 60px + 8px Abstand = ebenfalls 150 -
-        # also rechnerisch NULL Sicherheitsspielraum. Je nach Qt-Theme/Plattform (z.B. Pi) wird
-        # der Rahmen minimal breiter gerendert als unter Windows, wodurch die untere Zeile ohne
-        # Puffer angeschnitten wird - daher hier bewusst 15px Luft fuer den Listeninhalt.
-        list_safety_margin = 15
-        self.suggestions_area.setFixedHeight(nav_buttons_height + list_safety_margin)
-        overlay_height = nav_buttons_height + list_safety_margin
+        # exakt Null Ueberschuss. Jede zusaetzliche Hoehe hier wuerde nicht als Luft erscheinen,
+        # sondern den Anfang einer dritten (nicht mehr vollstaendigen) Vorschlagszeile sichtbar
+        # machen - genau das Abschneiden, das die Box wie im Mockup vermeiden soll.
+        overlay_height = nav_buttons_height
+        self.suggestions_area.setFixedHeight(overlay_height)
 
         y = self.input_row_widget.y() + self.input_row_widget.height() + 10
         self.suggestions_overlay.setGeometry(x, y, width, overlay_height)
+        print(
+            f"[DEBUG suggestions_overlay] page.height()={self.height()} "
+            f"input_row.y()={self.input_row_widget.y()} input_row.height()={self.input_row_widget.height()} "
+            f"overlay.y()={y} overlay_height={overlay_height} overlay_bottom={y + overlay_height} "
+            f"space_to_page_bottom={self.height() - (y + overlay_height)}"
+        )
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
