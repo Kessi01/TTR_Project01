@@ -666,40 +666,30 @@ class FullscreenKeyboardPage(QWidget):
         self.suggestions_box = QWidget()
         self.suggestions_layout = QVBoxLayout(self.suggestions_box)
 
+        # Styles/Groessen der Buttons werden vollstaendig in
+        # _apply_responsive_metrics() gesetzt (dort skaliert und dort auch
+        # neu gesetzt, wenn sich die Bildschirmgroesse aendert).
         self.suggestion_row_buttons = []
         for _ in range(2):
             btn = QPushButton("")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #0f3460; color: white;
-                    border: none; border-radius: 10px;
-                    font-size: 24px; text-align: left; padding-left: 20px;
-                }
-                QPushButton:pressed { background-color: #00d9ff; color: #1a1a2e; }
-            """)
             btn.clicked.connect(lambda checked, b=btn: self.on_suggestion_selected(b.text()))
             self.suggestions_layout.addWidget(btn)
             self.suggestion_row_buttons.append(btn)
         self.suggestions_overlay_layout.addWidget(self.suggestions_box, 1, Qt.AlignmentFlag.AlignTop)
 
         # Auf/Ab-Buttons statt Scrollbalken: ein Tap = ein Name weiter/zurueck.
+        # Keine addStretch() hier - die Buttons werden ueber symmetrische
+        # Contents-Margins (in _apply_responsive_metrics) vertikal zentriert,
+        # ein zusaetzlicher Stretch wuerde die Symmetrie durch Rundungsreste
+        # nur nach unten verschieben.
         self.suggestion_nav_layout = QVBoxLayout()
         self.btn_suggestion_up = QPushButton("▲")
         self.btn_suggestion_down = QPushButton("▼")
         for btn in (self.btn_suggestion_up, self.btn_suggestion_down):
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #00d9ff; color: #1a1a2e;
-                    border: none; border-radius: 10px;
-                    font-size: 20px; font-weight: bold;
-                }
-                QPushButton:pressed { background-color: #00b8d4; }
-            """)
         self.suggestion_nav_layout.addWidget(self.btn_suggestion_up)
         self.suggestion_nav_layout.addWidget(self.btn_suggestion_down)  # Abstand dazwischen = Luecke wie im Mockup
-        self.suggestion_nav_layout.addStretch(1)
         self.btn_suggestion_up.clicked.connect(lambda: self._scroll_suggestions(-1))
         self.btn_suggestion_down.clicked.connect(lambda: self._scroll_suggestions(1))
         self.suggestions_overlay_layout.addLayout(self.suggestion_nav_layout)
@@ -923,6 +913,11 @@ class FullscreenKeyboardPage(QWidget):
     DESIGN_REF_W = 1280
     DESIGN_REF_H = 720
 
+    # ▲/▼-Buttons in der Vorschlagsbox sind 12% groesser als die
+    # Namens-Balken (auf Wunsch, damit sie in etwa dem Dropdown-Toggle
+    # neben der Eingabezeile entsprechen). Der Toggle selbst bleibt gleich.
+    NAV_BUTTON_SCALE = 1.12
+
     def _current_screen_size(self):
         scr = self.screen()
         if scr is None and self.window() is not None:
@@ -952,25 +947,42 @@ class FullscreenKeyboardPage(QWidget):
         auseinanderlaufen (frueherer Bug: 2 getrennte Formeln, die nur beim
         Referenzwert 1:1 uebereinstimmten)."""
         row_h = self._px(60)
+        nav_h = round(row_h * self.NAV_BUTTON_SCALE)
         gap = self._px(8)
         margin = self._px(8)
         border = self._px(3)
-        box_height = margin * 2 + row_h * 2 + gap + border * 2
-        nav_margin = max(0, (box_height - row_h * 2 - gap) // 2)
-        return row_h, gap, margin, border, box_height, nav_margin
+
+        rows_stack_h = row_h * 2 + gap
+        nav_stack_h = nav_h * 2 + gap
+        content_h = max(rows_stack_h, nav_stack_h)
+        box_height = margin * 2 + content_h + border * 2
+
+        row_v_margin = margin + max(0, (content_h - rows_stack_h) // 2)
+        nav_v_margin = margin + max(0, (content_h - nav_stack_h) // 2)
+        return row_h, nav_h, gap, margin, row_v_margin, nav_v_margin, border, box_height
 
     def _apply_responsive_metrics(self):
         """Skaliert Eingabezeile, Dropdown- und Vorschlags-Buttons proportional
         zur tatsaechlichen Bildschirmgroesse (siehe DESIGN_REF_W/H)."""
         self.input_field.setFixedHeight(self._px(80))
-        self.btn_dropdown.setFixedSize(self._px_w(80), self._px(70))
+        self.btn_dropdown.setFixedSize(self._px_w(80), self._px(70))  # unveraendert
 
-        row_h, gap, margin, border, box_height, nav_margin = self._suggestion_box_metrics()
+        row_h, nav_h, gap, margin, row_v_margin, nav_v_margin, border, box_height = (
+            self._suggestion_box_metrics()
+        )
 
         for btn in self.suggestion_row_buttons:
             btn.setFixedHeight(row_h)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #0f3460; color: white;
+                    border: {border}px solid #00d9ff; border-radius: 10px;
+                    font-size: 24px; text-align: left; padding-left: 20px;
+                }}
+                QPushButton:pressed {{ background-color: #00d9ff; color: #1a1a2e; }}
+            """)
         self.suggestions_layout.setSpacing(gap)
-        self.suggestions_layout.setContentsMargins(margin, margin, margin, margin)
+        self.suggestions_layout.setContentsMargins(margin, row_v_margin, margin, row_v_margin)
         self.suggestions_box.setStyleSheet(f"""
             QWidget {{
                 background-color: #16213e;
@@ -980,8 +992,16 @@ class FullscreenKeyboardPage(QWidget):
         """)
 
         for btn in (self.btn_suggestion_up, self.btn_suggestion_down):
-            btn.setFixedSize(self._px_w(80), row_h)
-        self.suggestion_nav_layout.setContentsMargins(0, nav_margin, 0, nav_margin)
+            btn.setFixedSize(self._px_w(80), nav_h)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #00d9ff; color: #1a1a2e;
+                    border: none; border-radius: 10px;
+                    font-size: 20px; font-weight: bold;
+                }
+                QPushButton:pressed { background-color: #00b8d4; }
+            """)
+        self.suggestion_nav_layout.setContentsMargins(0, nav_v_margin, 0, nav_v_margin)
         self.suggestion_nav_layout.setSpacing(gap)  # Luecke zwischen ▲/▼ wie im Mockup
         self.suggestions_overlay_layout.setSpacing(self._px(6))
 
