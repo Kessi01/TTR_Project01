@@ -914,16 +914,11 @@ class FullscreenKeyboardPage(QWidget):
     DESIGN_REF_W = 1280
     DESIGN_REF_H = 720
 
-    # ▲/▼-Buttons in der Vorschlagsbox sind 12% groesser als die
-    # Namens-Balken (auf Wunsch, damit sie in etwa dem Dropdown-Toggle
-    # neben der Eingabezeile entsprechen). Der Toggle selbst bleibt gleich.
+    # ▲/▼-Buttons in der Vorschlagsbox sind exakt gleich gross wie der
+    # Dropdown-Toggle-Button neben der Eingabezeile (auf Wunsch). Die
+    # Namens-Balken bleiben etwas kleiner (~1/1.12), damit die Box nicht
+    # unnoetig aufgeblaeht wird - Verhaeltnis wie im Mockup.
     NAV_BUTTON_SCALE = 1.12
-
-    # Basis-Gesamthoehe der Vorschlagsbox (bei DESIGN_REF_H) - bewusst
-    # grosszuegig, die Box darf die oberen Tastaturreihen ueberdecken
-    # (raise_() bringt sie nach vorne; waehrend sie offen ist, tippt man
-    # ohnehin keinen Buchstaben, sondern waehlt einen Vorschlag aus).
-    SUGGESTION_BOX_BASE_HEIGHT = 280
 
     def _px(self, base_px):
         """Skaliert einen Pixelwert proportional zur tatsaechlichen Seitenhoehe."""
@@ -1016,12 +1011,6 @@ class FullscreenKeyboardPage(QWidget):
         self.suggestion_nav_layout.setSpacing(gap)  # Luecke zwischen ▲/▼ wie im Mockup
         self.suggestions_overlay_layout.setSpacing(self._px(6))
 
-        print(
-            f"[DEBUG suggestion_box] page={self.width()}x{self.height()} "
-            f"gap={gap} margin={margin} border={border} row_h={row_h} nav_h={nav_h} "
-            f"row_v_margin={row_v_margin} nav_v_margin={nav_v_margin} box_height={box_height}"
-        )
-
         self._suggestion_box_height = box_height
         return box_height
 
@@ -1048,16 +1037,19 @@ class FullscreenKeyboardPage(QWidget):
 
         gap = self._px(10)
         y = self.input_row_widget.y() + self.input_row_widget.height() + gap
-        # Grosszuegige, proportional skalierte Hoehe (siehe SUGGESTION_BOX_BASE_HEIGHT) -
-        # nach unten hin nur durch den Seitenrand begrenzt, nicht durch die
-        # Tastatur: die Box darf deren obere Reihen ueberdecken (raise_() in
-        # toggle_suggestions() bringt sie nach vorne).
-        overlay_height = min(self._px(self.SUGGESTION_BOX_BASE_HEIGHT), max(self._px(100), self.height() - y - gap))
 
-        # _apply_suggestion_metrics() kann die Hoehe noch nach oben korrigieren,
-        # falls die exakt-gleich-grossen Nav-Buttons mehr Platz brauchen als
-        # oben vorgesehen.
-        overlay_height = self._apply_suggestion_metrics(overlay_height)
+        # Box wird eng um ihren Inhalt (2 Zeilen + Nav-Buttons) zugeschnitten -
+        # 1:1 wie im Mockup, keine kuenstliche Zusatz-Luft. _apply_suggestion_metrics
+        # ignoriert eine zu kleine Vorgabe ohnehin und liefert die tatsaechlich
+        # benoetigte (knappe) Hoehe zurueck.
+        overlay_height = self._apply_suggestion_metrics(0)
+
+        # Nur nach unten hin durch den Bildschirmrand begrenzt - die Box darf
+        # dabei die oberen Tastaturreihen ueberdecken (raise_() in
+        # toggle_suggestions() bringt sie nach vorne).
+        max_available = max(self._px(100), self.height() - y - gap)
+        overlay_height = min(overlay_height, max_available)
+
         self.suggestions_overlay.setGeometry(x, y, width, overlay_height)
 
     def resizeEvent(self, event):
