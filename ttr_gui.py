@@ -2131,7 +2131,6 @@ class MatchSetupPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.main_window = parent
-        self.turniere = []
         self.keyboard = None  # Touch-Tastatur
         self.setup_ui()
     
@@ -2164,7 +2163,6 @@ class MatchSetupPage(QWidget):
             (1, "Best of 3"),    # Best of 3
             (2, "Best of 5"),    # Best of 5
             (3, "Best of 7"),    # Best of 7
-            # (4, "Turnier")       # Turnier -- auskommentiert zum Testen, da eigener Turnier-Tab existiert
         ]
         
         radio_style = """
@@ -2213,30 +2211,6 @@ class MatchSetupPage(QWidget):
         separator1.setFrameShape(QFrame.Shape.HLine)
         separator1.setStyleSheet("background-color: #0f3460; max-height: 2px;")
         layout.addWidget(separator1)
-        
-        # ===== Turnier-Auswahl (Versteckt, nur bei "Turnier") =====
-        self.turnier_container = QWidget()
-        turnier_layout = QHBoxLayout(self.turnier_container)
-        turnier_layout.setContentsMargins(0, 0, 0, 0)
-        
-        lbl_turnier = QLabel("Turnier:")
-        lbl_turnier.setStyleSheet("font-size: 22px; color: #00d9ff;")
-        turnier_layout.addWidget(lbl_turnier)
-        
-        self.combo_turnier = QComboBox()
-        self.combo_turnier.setMinimumHeight(55)
-        self.combo_turnier.setStyleSheet("""
-            QComboBox { background-color: #16213e; color: #ffffff; border: 2px solid #0f3460; border-radius: 10px; padding: 10px; font-size: 18px; }
-            QComboBox QAbstractItemView { background-color: #16213e; color: #ffffff; selection-background-color: #00d9ff; selection-color: #1a1a2e; }
-        """)
-        turnier_layout.addWidget(self.combo_turnier, 1)
-        
-        btn_new_turnier = QPushButton("+ Neu")
-        btn_new_turnier.setMinimumHeight(55)
-        btn_new_turnier.clicked.connect(self.on_new_turnier)
-        turnier_layout.addWidget(btn_new_turnier)
-        
-        layout.addWidget(self.turnier_container)
         
         # ===== Spieler Eingabe Container =====
         self.player_input_container = QWidget()
@@ -2336,57 +2310,17 @@ class MatchSetupPage(QWidget):
             1: "Best of 3",
             2: "Best of 5",
             3: "Best of 7",
-            4: "Turnier Modus"
         }
         self.title.setText(mode_names.get(index, "Match Setup"))
 
-        # 0: Schnelles Spiel, 1: Best of 3, 2: Best of 5, 3: Best of 7, 4: Turnier
-        
+        # 0: Schnelles Spiel, 1: Best of 3, 2: Best of 5, 3: Best of 7
+
         is_quick = (index == 0)
-        is_turnier = (index == 4)
-        
-        # Schnelles Spiel: Keine Namenseingabe
+
         # Schnelles Spiel: Keine Namenseingabe, dafür Info-Label
         self.player_input_container.setVisible(not is_quick)
         self.quick_label.setVisible(is_quick)
-        
-        # Turnier: Extra Dropdown anzeigen
-        self.turnier_container.setVisible(is_turnier)
-        if is_turnier:
-            self.load_turniere()
-    
-    def load_turniere(self):
-        self.combo_turnier.clear()
-        if self.main_window and self.main_window.db:
-            self.turniere = self.main_window.db.get_turniere()
-            for turnier in self.turniere:
-                # turnier = (id, name, datum, sets_to_win)
-                # Falls sets_to_win fehlt (altes Schema), Default 3
-                sets = 3
-                if len(turnier) > 3:
-                    sets = turnier[3]
-                    
-                turnier_id = turnier[0]
-                turnier_name = turnier[1]
-                
-                # Speichere sets_to_win in den Item-Daten als Tuple (id, sets)
-                self.combo_turnier.addItem(turnier_name, (turnier_id, sets))
-    
-    def on_new_turnier(self):
-        if not self.main_window:
-            return
 
-        def on_created(tid, name):
-            self.load_turniere()
-            # Neu erstelltes Turnier automatisch auswählen
-            for i in range(self.combo_turnier.count()):
-                data = self.combo_turnier.itemData(i)  # (id, sets)
-                if data and data[0] == tid:
-                    self.combo_turnier.setCurrentIndex(i)
-                    break
-
-        self.main_window.show_neu_turnier_page(return_index=1, on_created_callback=on_created)
-    
     def clear_inputs(self):
         self.input_player1.clear()
         self.input_player2.clear()
@@ -2408,13 +2342,11 @@ class MatchSetupPage(QWidget):
         # 1: Best of 3 -> 2 Sätze
         # 2: Best of 5 -> 3 Sätze
         # 3: Best of 7 -> 4 Sätze
-        # 4: Turnier
-        
+
         sets_to_win = 1
         if mode_index == 1: sets_to_win = 2
         elif mode_index == 2: sets_to_win = 3
         elif mode_index == 3: sets_to_win = 4
-        elif mode_index == 4: sets_to_win = 3 # Turnier Standard, oder aus DB laden?
         
         player1_name = ""
         player2_name = ""
@@ -2438,18 +2370,7 @@ class MatchSetupPage(QWidget):
         
         turnier_id = None
         turnier_name = None
-        if mode_index == 4: # Turnier
-            if self.combo_turnier.count() == 0:
-                show_custom_info_dialog(self, "Fehler", "Bitte wähle ein Turnier aus!")
-                return
-            
-            # Data ist jetzt (turnier_id, sets_to_win)
-            data = self.combo_turnier.currentData()
-            if data:
-                turnier_id = data[0]
-                sets_to_win = data[1] # HIER: Lade Regel aus Turnier
-                turnier_name = self.combo_turnier.currentText()
-        
+
         if self.main_window:
             self.main_window.current_turnier_id = turnier_id
             self.main_window.current_turnier_name = turnier_name
