@@ -2164,7 +2164,7 @@ class MatchSetupPage(QWidget):
             (1, "Best of 3"),    # Best of 3
             (2, "Best of 5"),    # Best of 5
             (3, "Best of 7"),    # Best of 7
-            (4, "Turnier")       # Turnier
+            # (4, "Turnier")       # Turnier -- auskommentiert zum Testen, da eigener Turnier-Tab existiert
         ]
         
         radio_style = """
